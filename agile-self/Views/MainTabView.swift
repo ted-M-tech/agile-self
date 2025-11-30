@@ -37,6 +37,8 @@ enum Tab: String, CaseIterable {
 
 struct MainTabView: View {
     @State private var selectedTab: Tab = .dashboard
+    @State private var showNewRetroSheet = false
+    @State private var previousTab: Tab = .dashboard
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -46,7 +48,8 @@ struct MainTabView: View {
                 }
                 .tag(Tab.dashboard)
 
-            NewRetroPlaceholderView()
+            // Placeholder for the "New" tab - actual content is shown as a sheet
+            Color.clear
                 .tabItem {
                     Label(Tab.new.title, systemImage: Tab.new.iconName)
                 }
@@ -69,6 +72,18 @@ struct MainTabView: View {
                     Label(Tab.settings.title, systemImage: Tab.settings.iconName)
                 }
                 .tag(Tab.settings)
+        }
+        .onChange(of: selectedTab) { oldValue, newValue in
+            if newValue == .new {
+                // Store the previous tab and show the sheet
+                previousTab = oldValue
+                showNewRetroSheet = true
+                // Reset to previous tab since "New" is modal
+                selectedTab = oldValue
+            }
+        }
+        .sheet(isPresented: $showNewRetroSheet) {
+            KPTAEntryView()
         }
     }
 }

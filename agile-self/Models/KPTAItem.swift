@@ -31,4 +31,21 @@ final class KPTAItem {
         self.orderIndex = orderIndex
         self.createdAt = createdAt
     }
+
+    // MARK: - Validation
+
+    /// Returns true if the item has valid content
+    var isValid: Bool {
+        !trimmedText.isEmpty
+    }
+
+    /// Returns the text with leading/trailing whitespace removed
+    var trimmedText: String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Updates the text with validated content
+    func updateText(_ newText: String) {
+        text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }

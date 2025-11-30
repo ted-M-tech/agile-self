@@ -16,18 +16,14 @@ final class Retrospective {
     var startDate: Date
     var endDate: Date
 
+    // Single relationship to all KPTA items - use computed properties to filter by category
     @Relationship(deleteRule: .cascade, inverse: \KPTAItem.retrospective)
-    var keeps: [KPTAItem]
-
-    @Relationship(deleteRule: .cascade, inverse: \KPTAItem.retrospective)
-    var problems: [KPTAItem]
-
-    @Relationship(deleteRule: .cascade, inverse: \KPTAItem.retrospective)
-    var tries: [KPTAItem]
+    var kptaItems: [KPTAItem]
 
     @Relationship(deleteRule: .cascade, inverse: \ActionItem.retrospective)
     var actions: [ActionItem]
 
+    @Relationship(deleteRule: .cascade, inverse: \HealthSummary.retrospective)
     var healthSummary: HealthSummary?
 
     var createdAt: Date
@@ -39,9 +35,7 @@ final class Retrospective {
         type: RetrospectiveType,
         startDate: Date,
         endDate: Date,
-        keeps: [KPTAItem] = [],
-        problems: [KPTAItem] = [],
-        tries: [KPTAItem] = [],
+        kptaItems: [KPTAItem] = [],
         actions: [ActionItem] = [],
         healthSummary: HealthSummary? = nil,
         createdAt: Date = Date(),
@@ -52,13 +46,67 @@ final class Retrospective {
         self.type = type
         self.startDate = startDate
         self.endDate = endDate
-        self.keeps = keeps
-        self.problems = problems
-        self.tries = tries
+        self.kptaItems = kptaItems
         self.actions = actions
         self.healthSummary = healthSummary
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    // MARK: - Category-Filtered Accessors
+
+    var keeps: [KPTAItem] {
+        kptaItems.filter { $0.category == .keep }.sorted { $0.orderIndex < $1.orderIndex }
+    }
+
+    var problems: [KPTAItem] {
+        kptaItems.filter { $0.category == .problem }.sorted { $0.orderIndex < $1.orderIndex }
+    }
+
+    var tries: [KPTAItem] {
+        kptaItems.filter { $0.category == .try }.sorted { $0.orderIndex < $1.orderIndex }
+    }
+
+    // MARK: - KPTA Item Management
+
+    func addKeep(_ text: String) -> KPTAItem {
+        let item = KPTAItem(text: text, category: .keep, orderIndex: keeps.count)
+        kptaItems.append(item)
+        touch()
+        return item
+    }
+
+    func addProblem(_ text: String) -> KPTAItem {
+        let item = KPTAItem(text: text, category: .problem, orderIndex: problems.count)
+        kptaItems.append(item)
+        touch()
+        return item
+    }
+
+    func addTry(_ text: String) -> KPTAItem {
+        let item = KPTAItem(text: text, category: .try, orderIndex: tries.count)
+        kptaItems.append(item)
+        touch()
+        return item
+    }
+
+    func removeKPTAItem(_ item: KPTAItem) {
+        kptaItems.removeAll { $0.id == item.id }
+        touch()
+    }
+
+    // MARK: - Action Item Management
+
+    func addAction(_ text: String, deadline: Date? = nil, fromTryItem: Bool = false) -> ActionItem {
+        let item = ActionItem(text: text, deadline: deadline, fromTryItem: fromTryItem)
+        actions.append(item)
+        touch()
+        return item
+    }
+
+    func removeAction(_ item: ActionItem) {
+        actions.removeAll { $0.id == item.id }
+        touch()
     }
 
     // MARK: - Computed Properties
@@ -77,7 +125,7 @@ final class Retrospective {
     }
 
     var totalKPTACount: Int {
-        keeps.count + problems.count + tries.count
+        kptaItems.count
     }
 
     var formattedDateRange: String {
@@ -104,5 +152,66 @@ final class Retrospective {
 
     func touch() {
         updatedAt = Date()
+    }
+
+    // MARK: - Validation
+
+    /// Validates that the retrospective has valid data
+    var isValid: Bool {
+        // Title must not be empty
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+
+        // Date range must be valid
+        guard startDate <= endDate else {
+            return false
+        }
+
+        // Must have at least one KPTA item
+        guard !kptaItems.isEmpty else {
+            return false
+        }
+
+        return true
+    }
+
+    /// Returns validation errors if any
+    var validationErrors: [String] {
+        var errors: [String] = []
+
+        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            errors.append("Title cannot be empty")
+        }
+
+        if startDate > endDate {
+            errors.append("End date must be after start date")
+        }
+
+        if kptaItems.isEmpty {
+            errors.append("At least one Keep, Problem, or Try item is required")
+        }
+
+        return errors
+    }
+
+    /// Returns the count of valid KPTA items (with non-empty text)
+    var validKPTACount: Int {
+        kptaItems.filter { $0.isValid }.count
+    }
+
+    /// Returns the count of valid actions (with non-empty text)
+    var validActionsCount: Int {
+        actions.filter { $0.isValid }.count
+    }
+
+    /// Returns overdue action items
+    var overdueActions: [ActionItem] {
+        actions.filter { $0.isOverdue }
+    }
+
+    /// Returns the number of days in the retrospective period
+    var periodDays: Int {
+        Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
     }
 }
