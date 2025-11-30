@@ -1,0 +1,17 @@
+//
+//  agile_self_Watch_AppTests.swift
+//  agile-self Watch AppTests
+//
+//  Created by Tetsuya Maeda on 2025/11/30.
+//
+
+import Testing
+@testable import agile_self_Watch_App
+
+struct agile_self_Watch_AppTests {
+
+    @Test func example() async throws {
+        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+    }
+
+}
