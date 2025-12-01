@@ -193,6 +193,13 @@ final class KPTAEntryViewModel {
         }
     }
 
+    // MARK: - Action Generation (for wizard)
+
+    /// In wizard mode, all valid Tries automatically become Actions
+    var actionsFromTries: [DraftTryItem] {
+        validTries
+    }
+
     // MARK: - Date Range Methods
 
     func updateDateRange(for type: RetrospectiveType) {
@@ -201,6 +208,9 @@ final class KPTAEntryViewModel {
         let today = Date()
 
         switch type {
+        case .daily:
+            startDate = calendar.startOfDay(for: today)
+            endDate = calendar.startOfDay(for: today)
         case .weekly:
             startDate = calendar.startOfWeek(for: today)
             endDate = calendar.endOfWeek(for: today)
@@ -214,6 +224,11 @@ final class KPTAEntryViewModel {
         let calendar = Calendar.current
 
         switch retroType {
+        case .daily:
+            if let newDate = calendar.date(byAdding: .day, value: -1, to: startDate) {
+                startDate = calendar.startOfDay(for: newDate)
+                endDate = calendar.startOfDay(for: newDate)
+            }
         case .weekly:
             if let newStart = calendar.date(byAdding: .weekOfYear, value: -1, to: startDate) {
                 startDate = calendar.startOfWeek(for: newStart)
@@ -231,6 +246,11 @@ final class KPTAEntryViewModel {
         let calendar = Calendar.current
 
         switch retroType {
+        case .daily:
+            if let newDate = calendar.date(byAdding: .day, value: 1, to: startDate) {
+                startDate = calendar.startOfDay(for: newDate)
+                endDate = calendar.startOfDay(for: newDate)
+            }
         case .weekly:
             if let newStart = calendar.date(byAdding: .weekOfYear, value: 1, to: startDate) {
                 startDate = calendar.startOfWeek(for: newStart)
@@ -302,6 +322,7 @@ final class KPTAEntryViewModel {
         }
 
         // Add Try items to kptaItems and create actions
+        // In wizard mode, all valid Tries automatically become Actions
         for (index, draft) in validTries.enumerated() {
             let item = KPTAItem(
                 text: draft.text.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -310,15 +331,15 @@ final class KPTAEntryViewModel {
             )
             retrospective.kptaItems.append(item)
 
-            // Create action if specified
-            if draft.hasValidAction {
-                let action = ActionItem(
-                    text: draft.actionText.trimmingCharacters(in: .whitespacesAndNewlines),
-                    deadline: draft.actionDeadline,
-                    fromTryItem: true
-                )
-                retrospective.actions.append(action)
-            }
+            // Create action from Try (wizard mode: all Tries become Actions)
+            // Use try text as action text if no specific action text provided
+            let actionText = draft.actionText.isEmpty ? draft.text : draft.actionText
+            let action = ActionItem(
+                text: actionText.trimmingCharacters(in: .whitespacesAndNewlines),
+                deadline: draft.actionDeadline,
+                fromTryItem: true
+            )
+            retrospective.actions.append(action)
         }
 
         // Save changes
