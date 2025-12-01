@@ -6,233 +6,85 @@
 //
 
 import SwiftUI
+import SwiftData
 
+/// Tab identifiers for the main navigation (3 tabs - Apple style)
 enum Tab: String, CaseIterable {
-    case dashboard
-    case new
+    case home
     case actions
     case history
-    case settings
 
     var title: String {
         switch self {
-        case .dashboard: return "Dashboard"
-        case .new: return "New"
+        case .home: return "Home"
         case .actions: return "Actions"
         case .history: return "History"
-        case .settings: return "Settings"
         }
     }
 
     var iconName: String {
         switch self {
-        case .dashboard: return "chart.bar.fill"
-        case .new: return "plus.circle.fill"
+        case .home: return "house.fill"
         case .actions: return "checklist"
         case .history: return "clock.fill"
-        case .settings: return "gearshape.fill"
         }
     }
 }
 
+/// Main tab view with 3-tab navigation (Apple style)
 struct MainTabView: View {
-    @State private var selectedTab: Tab = .dashboard
+    @State private var selectedTab: Tab = .home
     @State private var showNewRetroSheet = false
-    @State private var previousTab: Tab = .dashboard
+    @State private var showSettings = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            DashboardPlaceholderView()
-                .tabItem {
-                    Label(Tab.dashboard.title, systemImage: Tab.dashboard.iconName)
-                }
-                .tag(Tab.dashboard)
+            // Home Tab
+            HomeView(
+                onNewRetro: { showNewRetroSheet = true },
+                onShowSettings: { showSettings = true }
+            )
+            .tabItem {
+                Label(Tab.home.title, systemImage: Tab.home.iconName)
+            }
+            .tag(Tab.home)
 
-            // Placeholder for the "New" tab - actual content is shown as a sheet
-            Color.clear
-                .tabItem {
-                    Label(Tab.new.title, systemImage: Tab.new.iconName)
-                }
-                .tag(Tab.new)
-
-            ActionsPlaceholderView()
+            // Actions Tab
+            ActionsListView()
                 .tabItem {
                     Label(Tab.actions.title, systemImage: Tab.actions.iconName)
                 }
                 .tag(Tab.actions)
 
-            HistoryPlaceholderView()
+            // History Tab
+            HistoryView()
                 .tabItem {
                     Label(Tab.history.title, systemImage: Tab.history.iconName)
                 }
                 .tag(Tab.history)
-
-            SettingsPlaceholderView()
-                .tabItem {
-                    Label(Tab.settings.title, systemImage: Tab.settings.iconName)
-                }
-                .tag(Tab.settings)
         }
-        .onChange(of: selectedTab) { oldValue, newValue in
-            if newValue == .new {
-                // Store the previous tab and show the sheet
-                previousTab = oldValue
-                showNewRetroSheet = true
-                // Reset to previous tab since "New" is modal
-                selectedTab = oldValue
-            }
-        }
+        .tint(Theme.KPTA.action)
         .sheet(isPresented: $showNewRetroSheet) {
-            KPTAEntryView()
+            KPTAWizardView()
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
         }
     }
 }
 
-// MARK: - Placeholder Views
-
-struct DashboardPlaceholderView: View {
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: Theme.Spacing.lg) {
-                Image(systemName: "chart.bar.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.secondary)
-
-                Text("Dashboard")
-                    .font(Theme.Typography.title)
-
-                Text("Your wellbeing score, recent retrospectives, and insights will appear here.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, Theme.Spacing.xl)
-            }
-            .navigationTitle("Dashboard")
-        }
-    }
-}
-
-struct NewRetroPlaceholderView: View {
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: Theme.Spacing.lg) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(Theme.KPTA.action)
-
-                Text("New Retrospective")
-                    .font(Theme.Typography.title)
-
-                Text("Create a new weekly or monthly retrospective using the KPTA framework.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, Theme.Spacing.xl)
-
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    KPTALegendRow(category: .keep, description: "What went well")
-                    KPTALegendRow(category: .problem, description: "Obstacles faced")
-                    KPTALegendRow(category: .try, description: "New approaches")
-                    HStack(spacing: Theme.Spacing.sm) {
-                        Image(systemName: "checkmark.square.fill")
-                            .foregroundStyle(Theme.KPTA.action)
-                        Text("Action")
-                            .fontWeight(.medium)
-                        Text("- Concrete to-dos")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(Theme.Spacing.md)
-                .background(.regularMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-            }
-            .navigationTitle("New")
-        }
-    }
-}
-
-struct KPTALegendRow: View {
-    let category: KPTACategory
-    let description: String
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: category.iconName)
-                .foregroundStyle(category.color)
-            Text(category.displayName)
-                .fontWeight(.medium)
-            Text("- \(description)")
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-struct ActionsPlaceholderView: View {
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: Theme.Spacing.lg) {
-                Image(systemName: "checklist")
-                    .font(.system(size: 60))
-                    .foregroundStyle(Theme.KPTA.action)
-
-                Text("Actions")
-                    .font(Theme.Typography.title)
-
-                Text("Track and complete your action items from retrospectives.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, Theme.Spacing.xl)
-            }
-            .navigationTitle("Actions")
-        }
-    }
-}
-
-struct HistoryPlaceholderView: View {
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: Theme.Spacing.lg) {
-                Image(systemName: "clock.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.secondary)
-
-                Text("History")
-                    .font(Theme.Typography.title)
-
-                Text("Browse and search your past retrospectives.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, Theme.Spacing.xl)
-            }
-            .navigationTitle("History")
-        }
-    }
-}
-
-struct SettingsPlaceholderView: View {
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: Theme.Spacing.lg) {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.secondary)
-
-                Text("Settings")
-                    .font(Theme.Typography.title)
-
-                Text("Configure reminders, manage data, and customize your experience.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, Theme.Spacing.xl)
-            }
-            .navigationTitle("Settings")
-        }
-    }
-}
+// MARK: - Preview
 
 #Preview {
-    MainTabView()
+    do {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: ActionItem.self, Retrospective.self, KPTAItem.self, HealthSummary.self,
+            configurations: config
+        )
+        return MainTabView()
+            .modelContainer(container)
+    } catch {
+        return Text("Preview Error: \(error.localizedDescription)")
+    }
 }
