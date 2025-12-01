@@ -1,400 +1,247 @@
-# Agile Self
+# Agile Self - Product Specification
 
-## Turn Reflection Into Action
+**Turn Reflection Into Action**
 
-Agile Self is a native iOS app for personal growth through structured reflection, powered by your health and activity data.
+A native iOS app for personal growth through structured KPTA retrospectives, enriched with Apple Health data.
 
 ---
 
 ## Overview
 
-Agile Self combines the KPT reflection framework with quantitative insights from Apple Health and Screen Time. By connecting how you feel with measurable data, you gain deeper self-awareness and make meaningful progress.
+Agile Self combines the KPTA reflection framework with quantitative insights from Apple Health. By connecting subjective reflection with measurable data, users gain deeper self-awareness and convert insights into concrete actions.
 
 ### Core Principles
 
-- **Reflection-First** — Weekly and monthly retrospectives using KPT
-- **Data-Informed** — Health, activity, and screen time context
-- **Privacy-Native** — All data stays on-device and in your iCloud
-- **Minimal by Design** — Simple interface, focused experience
+- **Reflection-First** - Daily, weekly, and monthly retrospectives using KPTA
+- **Action-Oriented** - Every Try automatically becomes an actionable task
+- **Data-Informed** - Health and activity context for each retrospective
+- **Privacy-Native** - All data on-device and in user's iCloud
+- **Minimal Design** - Clean Apple-style interface
 
 ---
 
-## KPT Framework
+## KPTA Framework
 
-The KPT framework structures reflection into three clear categories.
+The KPTA framework structures reflection into four categories:
 
 ### Keep
-
-What went well. What you want to continue.
-
+What went well. What to continue.
 - Positive habits maintained
 - Achievements and wins
-- Effective strategies that worked
+- Effective strategies
 
 ### Problem
-
 What challenged you. What got in the way.
-
 - Obstacles and frustrations
 - Patterns that didn't serve you
-- Things that need attention
+- Areas needing attention
 
 ### Try
-
 What you'll experiment with next.
-
 - New approaches to test
 - Solutions to problems identified
-- Ways to build on your keeps
+- Ways to build on keeps
+
+### Action
+Concrete tasks derived from Tries.
+- Each Try automatically creates an Action
+- Actions have optional deadlines and priorities
+- Track completion across all retrospectives
 
 ---
 
-## Quantitative Context
+## App Structure
 
-Agile Self enriches your reflections with objective data from three sources.
-
-### Health Data
-
-From Apple HealthKit:
-
-| Metric | Description |
-|--------|-------------|
-| Sleep Duration | Average hours per night |
-| Sleep Quality | Derived from sleep stages |
-| Steps | Daily step count average |
-| Active Calories | Energy burned through activity |
-| Exercise Minutes | Workout duration |
-| Stand Hours | Hours with movement |
-| Workouts | Session count by type |
-
-### Screen Time
-
-From DeviceActivity Framework:
-
-| Metric | Description |
-|--------|-------------|
-| Total Screen Time | Daily average usage |
-| Pickups | How often you check your device |
-| Notifications | Interruption frequency |
-| App Categories | Where time is spent |
-
-### Wellness Score
-
-A unified 0-100 score calculated from:
-
-- Sleep quality and consistency
-- Physical activity levels
-- Screen time balance
-- Weekly trends and changes
-
----
-
-## Information Architecture
-
-### Tab Structure
+### Navigation (3 Tabs)
 
 ```
 ┌─────────────────────────────────────────┐
 │                                         │
-│              Dashboard                  │
-│         Wellness at a glance            │
+│              Home Dashboard             │
+│         Health + Stats + Recent         │
 │                                         │
-├─────────┬─────────┬─────────┬──────────┤
-│         │         │         │          │
-│  Home   │   KPT   │ Insights│ Settings │
-│         │         │         │          │
-└─────────┴─────────┴─────────┴──────────┘
+├─────────────┬─────────────┬─────────────┤
+│             │             │             │
+│    Home     │   Actions   │   History   │
+│             │             │             │
+└─────────────┴─────────────┴─────────────┘
 ```
 
 ### Home
+Dashboard view with:
+- Today's health metrics (sleep, steps, calories, exercise)
+- Quick stats (retros count, pending actions, completed)
+- Overdue actions alert
+- Upcoming actions
+- Recent retrospective summary
+- Settings access (gear icon in nav bar)
 
-Your current state and recent activity.
+### Actions
+Action management with:
+- Filter by status (all, pending, completed, overdue)
+- Sort by priority, deadline, or date created
+- Mark complete/incomplete
+- Edit details and deadlines
+- Add standalone actions
 
-- Wellness score with trend
-- Latest retrospective summary
-- Quick stats: sleep, steps, screen time
-- Upcoming check-in reminder
+### History
+Past retrospectives with:
+- List grouped by month
+- Filter by type (daily, weekly, monthly)
+- Detail view showing all KPTA items
+- Delete retrospectives
 
-### KPT
-
-Create and manage retrospectives.
-
-- New retrospective (Weekly / Monthly)
-- Date range with quantitative context preview
-- KPT entry with rich text
-- History of past retrospectives
-
-### Insights
-
-Deep dive into your data.
-
-- Health trends over time
-- Screen time patterns
-- Correlations between metrics
-- Personal best highlights
-
-### Settings
-
-Control your experience.
-
-- Health permissions
-- Screen Time permissions
-- iCloud sync status
-- Notification preferences
-- Export data
-- About
+### New Retrospective (Sheet)
+Step-by-step wizard flow:
+1. **Setup** - Select type (daily/weekly/monthly) and date range
+2. **Keep** - Enter keeps
+3. **Problem** - Enter problems
+4. **Try** - Enter tries (each becomes an action)
+5. **Review** - Preview and save
 
 ---
 
 ## Data Model
 
-### Core Entities
-
+### Retrospective
 ```
 Retrospective
 ├── id: UUID
 ├── title: String
-├── type: weekly | monthly
-├── dateRange: DateInterval
-├── keeps: [KPTItem]
-├── problems: [KPTItem]
-├── tries: [KPTItem]
-├── context: QuantitativeContext?
-└── timestamps: created, updated
-
-KPTItem
-├── id: UUID
-├── category: keep | problem | try
-├── text: String
-├── retrospective: Retrospective
-└── timestamps: created, updated
-
-QuantitativeContext
-├── id: UUID
-├── dateRange: DateInterval
-├── health: HealthSummary?
-├── screenTime: ScreenTimeSummary?
-├── wellnessScore: Int?
-└── retrospective: Retrospective?
+├── type: daily | weekly | monthly
+├── startDate: Date
+├── endDate: Date
+├── kptaItems: [KPTAItem]       # All K/P/T items
+├── actions: [ActionItem]
+├── healthSummary: HealthSummary?
+├── createdAt: Date
+└── updatedAt: Date
 ```
 
-### Health Summary
+### KPTAItem
+```
+KPTAItem
+├── id: UUID
+├── text: String
+├── category: keep | problem | try
+├── orderIndex: Int
+├── retrospective: Retrospective
+├── createdAt: Date
+└── updatedAt: Date
+```
 
+### ActionItem
+```
+ActionItem
+├── id: UUID
+├── text: String
+├── isCompleted: Bool
+├── completedAt: Date?
+├── deadline: Date?
+├── priority: low | medium | high
+├── fromTryItem: Bool
+├── notes: String?
+├── retrospective: Retrospective?
+├── sourceKPTAItem: KPTAItem?
+├── createdAt: Date
+└── updatedAt: Date
+```
+
+### HealthSummary
 ```
 HealthSummary
+├── id: UUID
+├── periodStart: Date
+├── periodEnd: Date
 ├── avgSleepMinutes: Int?
-├── avgSleepQuality: Int?        (0-100)
 ├── avgSteps: Int?
 ├── avgActiveCalories: Int?
 ├── totalExerciseMinutes: Int?
 ├── avgStandHours: Int?
-└── totalWorkouts: Int?
+├── totalWorkouts: Int?
+├── wellnessScore: Int?          # 0-100
+└── retrospective: Retrospective?
 ```
 
-### Screen Time Summary
+---
 
-```
-ScreenTimeSummary
-├── avgScreenMinutes: Int?
-├── avgPickups: Int?
-├── avgNotifications: Int?
-└── topCategories: [String]?
-```
+## Health Integration
+
+### Metrics Displayed
+
+| Metric | Source | Display |
+|--------|--------|---------|
+| Sleep | HealthKit (sleepAnalysis) | Hours and minutes |
+| Steps | HealthKit (stepCount) | Daily count |
+| Active Calories | HealthKit (activeEnergyBurned) | kcal |
+| Exercise | HealthKit (appleExerciseTime) | Minutes |
+
+### Home Dashboard
+Today's health data shown in a 2x2 grid with icons and colors.
+
+### Authorization
+- Request read-only access on first launch
+- Handle denial gracefully with fallback UI
+- Show "Enable in Settings" message if denied
 
 ---
 
 ## Design Language
 
-### Color System
+### Color Scheme
 
-| Element | Color | Hex | Usage |
-|---------|-------|-----|-------|
-| Keep | Green | #34C759 | Positive, continue |
-| Problem | Red | #FF3B30 | Challenges |
-| Try | Purple | #AF52DE | Experiments |
-| Health | Blue | #007AFF | Quantitative data |
-| Screen Time | Orange | #FF9500 | Digital wellness |
-| Wellness | Teal | #5AC8FA | Overall score |
+| Element | Color | Usage |
+|---------|-------|-------|
+| Keep | Green (#34C759) | Positive items |
+| Problem | Red (#FF3B30) | Challenges |
+| Try | Purple (#AF52DE) | Experiments |
+| Action | Blue (#007AFF) | Tasks |
 
 ### Typography
-
 Following Apple Human Interface Guidelines:
-
-- **Large Title** — Screen headers
-- **Title** — Section headers
-- **Body** — Primary content
-- **Callout** — Secondary information
-- **Caption** — Metadata and labels
+- Large Title - Screen headers
+- Headline - Section headers
+- Body - Content
+- Callout - Secondary text
+- Caption - Labels and metadata
 
 ### Components
-
 - Native SwiftUI controls
-- SF Symbols for all icons
-- Card-based layouts for KPT items
-- Charts for quantitative visualization
-- Dynamic Type support throughout
+- SF Symbols for icons
+- Card-based layouts
+- .regularMaterial backgrounds
+- Rounded corners (Theme.CornerRadius)
 
 ---
 
-## Technical Architecture
+## Technical Stack
 
-### Platform Requirements
-
-| Requirement | Version |
-|-------------|---------|
-| iOS | 17.0+ |
-| watchOS | 10.0+ |
-| Swift | 5.9+ |
-| Xcode | 15.0+ |
-
-### Technology Stack
-
-| Layer | Technology |
-|-------|------------|
+| Component | Technology |
+|-----------|------------|
+| Language | Swift 5.9+ |
 | UI | SwiftUI |
 | Data | SwiftData |
 | Sync | CloudKit (automatic) |
 | Health | HealthKit |
-| Screen Time | DeviceActivity |
-| Charts | Swift Charts |
-
-### Project Structure
-
-```
-agile-self/
-├── App/
-│   └── AgileSelfApp.swift
-├── Models/
-│   ├── Retrospective.swift
-│   ├── KPTItem.swift
-│   ├── KPTCategory.swift
-│   ├── QuantitativeContext.swift
-│   ├── HealthSummary.swift
-│   └── ScreenTimeSummary.swift
-├── Views/
-│   ├── Dashboard/
-│   ├── KPT/
-│   ├── Insights/
-│   └── Settings/
-├── Services/
-│   ├── Health/
-│   │   ├── HealthKitManager.swift
-│   │   └── HealthDataAggregator.swift
-│   ├── ScreenTime/
-│   │   └── ScreenTimeManager.swift
-│   └── Wellness/
-│       └── WellnessScoreCalculator.swift
-└── Utilities/
-    ├── Theme.swift
-    └── Extensions/
-```
+| Platform | iOS 17.0+ |
 
 ---
 
 ## Privacy
 
-### Data Handling
-
-- **On-Device Processing** — All health and screen time data processed locally
-- **iCloud Sync** — Retrospectives sync via CloudKit to user's private database
-- **No External Services** — Zero third-party analytics or tracking
-- **Read-Only Health Access** — Never writes to Apple Health
-- **User Control** — Full data export and deletion available
-
-### Required Permissions
-
-| Permission | Purpose |
-|------------|---------|
-| HealthKit Read | Access sleep, activity, workout data |
-| DeviceActivity | Access screen time metrics |
-| iCloud | Sync retrospectives across devices |
-| Notifications | Weekly check-in reminders |
+- All data stored on-device and in user's private iCloud
+- No external servers or analytics
+- Read-only HealthKit access
+- User can delete all data in Settings
+- Health data never leaves Apple ecosystem
 
 ---
 
-## Implementation Phases
+## Future Considerations
 
-### Phase 1: Core KPT
-
-Foundation with simplified reflection flow.
-
-- KPT entry interface (no actions)
-- Retrospective list and detail views
-- SwiftData models and CloudKit sync
-- Basic dashboard
-
-### Phase 2: Health Integration
-
-Connect Apple Health data.
-
-- HealthKit authorization flow
-- Health data fetching and aggregation
-- Health summary display during KPT entry
-- Wellness score calculation (health only)
-
-### Phase 3: Screen Time Integration
-
-Add digital wellness context.
-
-- DeviceActivity authorization
-- Screen time data collection
-- Combined quantitative context
-- Full wellness score
-
-### Phase 4: Insights
-
-Data visualization and trends.
-
-- Swift Charts implementation
-- Historical trend views
-- Correlation insights
-- Personal bests and streaks
-
-### Phase 5: Polish
-
-Refinement and platform expansion.
-
+- Voice input with Apple Speech Recognition
+- AI-powered insights (on-device or Apple Intelligence)
 - watchOS companion app
 - Home screen widgets
-- Accessibility audit
-- Performance optimization
-
----
-
-## Appendix
-
-### Wellness Score Algorithm
-
-```
-Sleep Score (0-40 points)
-├── Duration: 7-9 hours optimal
-├── Consistency: Regular bedtime
-└── Quality: Deep sleep percentage
-
-Activity Score (0-30 points)
-├── Steps: 8000+ daily target
-├── Exercise: 30+ min daily
-└── Stand hours: 12+ hours
-
-Balance Score (0-30 points)
-├── Screen time: <4 hours daily
-├── Pickups: <50 per day
-└── Evening screen: Minimal after 9pm
-
-Total: 0-100
-```
-
-### KPT vs KPTA
-
-This app uses KPT (Keep, Problem, Try) rather than KPTA:
-
-| Framework | Components | Focus |
-|-----------|------------|-------|
-| KPTA | Keep, Problem, Try, Action | Reflection + Task Management |
-| KPT | Keep, Problem, Try | Pure Reflection |
-
-KPT keeps the focus on self-awareness and insight. Task management is left to dedicated tools.
-
----
-
-*Agile Self — Your AI Growth Partner*
+- Screen Time integration (DeviceActivity)
+- Calendar integration

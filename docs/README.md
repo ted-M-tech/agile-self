@@ -2,35 +2,38 @@
 
 **Turn Reflection Into Action**
 
-A native iOS app for personal growth through structured reflection, powered by your health and activity data.
+A native iOS app for personal growth through structured KPTA retrospectives, powered by Apple Health data.
 
 ---
 
 ## What is Agile Self?
 
-Agile Self helps you build self-awareness through weekly retrospectives. Using the KPT framework (Keep, Problem, Try), you reflect on what's working, what's challenging, and what to experiment with next.
+Agile Self helps you build self-awareness through daily, weekly, and monthly retrospectives. Using the KPTA framework (Keep, Problem, Try, Action), you reflect on what's working, what's challenging, and what to try next - then automatically convert those insights into actionable tasks.
 
-What makes it different: your reflections are enriched with real data from Apple Health and Screen Time, giving you objective context alongside your subjective insights.
+Your reflections are enriched with real data from Apple Health, giving you objective context alongside your subjective insights.
 
 ---
 
 ## Features
 
-### KPT Reflection
+### KPTA Reflection
+- **Keep** - Document wins and habits to continue
+- **Problem** - Identify challenges and obstacles
+- **Try** - Plan experiments and new approaches
+- **Action** - Automatic task creation from every Try
 
-- **Keep** — Document wins and habits to continue
-- **Problem** — Identify challenges and obstacles
-- **Try** — Plan experiments and new approaches
+### Health Dashboard
+- Sleep duration (last night)
+- Steps count (today)
+- Active calories
+- Exercise minutes
 
-### Quantitative Context
-
-- Sleep duration and quality
-- Activity and exercise metrics
-- Screen time and device pickups
-- Unified wellness score (0-100)
+### Action Management
+- Filter by status (pending, completed, overdue)
+- Sort by priority or deadline
+- Track completion across retrospectives
 
 ### Privacy-First
-
 - All data stays on-device and in your iCloud
 - No external servers or analytics
 - Read-only access to Apple Health
@@ -54,8 +57,8 @@ open agile-self.xcodeproj
 ```
 
 1. Select your development team
-2. Enable capabilities: iCloud, HealthKit
-3. Build and run
+2. Add HealthKit capability
+3. Build and run (Cmd+R)
 
 ---
 
@@ -75,8 +78,7 @@ open agile-self.xcodeproj
 | UI | SwiftUI |
 | Data | SwiftData + CloudKit |
 | Health | HealthKit |
-| Screen Time | DeviceActivity |
-| Charts | Swift Charts |
+| Platform | iOS 17+ |
 
 ---
 
