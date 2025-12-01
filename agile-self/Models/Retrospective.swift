@@ -97,11 +97,44 @@ final class Retrospective {
 
     // MARK: - Action Item Management
 
-    func addAction(_ text: String, deadline: Date? = nil, fromTryItem: Bool = false) -> ActionItem {
-        let item = ActionItem(text: text, deadline: deadline, fromTryItem: fromTryItem)
+    func addAction(
+        _ text: String,
+        deadline: Date? = nil,
+        priority: ActionPriority = .medium,
+        fromTryItem: Bool = false,
+        sourceKPTAItem: KPTAItem? = nil,
+        notes: String? = nil
+    ) -> ActionItem {
+        let item = ActionItem(
+            text: text,
+            deadline: deadline,
+            fromTryItem: fromTryItem || sourceKPTAItem != nil,
+            priority: priority,
+            notes: notes
+        )
+        item.sourceKPTAItem = sourceKPTAItem
         actions.append(item)
         touch()
         return item
+    }
+
+    /// Create an action directly from a Try item
+    @discardableResult
+    func addActionFromTry(
+        _ tryItem: KPTAItem,
+        text: String? = nil,
+        deadline: Date? = nil,
+        priority: ActionPriority = .medium,
+        notes: String? = nil
+    ) -> ActionItem {
+        return addAction(
+            text ?? tryItem.text,
+            deadline: deadline,
+            priority: priority,
+            fromTryItem: true,
+            sourceKPTAItem: tryItem,
+            notes: notes
+        )
     }
 
     func removeAction(_ item: ActionItem) {
@@ -141,6 +174,9 @@ final class Retrospective {
         let formatter = DateFormatter()
 
         switch type {
+        case .daily:
+            formatter.dateFormat = "EEEE, MMM d"
+            return formatter.string(from: startDate)
         case .weekly:
             formatter.dateFormat = "MMM d"
             return "Week of \(formatter.string(from: startDate))"
@@ -208,6 +244,42 @@ final class Retrospective {
     /// Returns overdue action items
     var overdueActions: [ActionItem] {
         actions.filter { $0.isOverdue }
+    }
+
+    /// Returns pending action items (not completed)
+    var pendingActions: [ActionItem] {
+        actions.filter { !$0.isCompleted }
+    }
+
+    /// Returns completed action items
+    var completedActions: [ActionItem] {
+        actions.filter { $0.isCompleted }
+    }
+
+    /// Returns high priority pending actions
+    var highPriorityPendingActions: [ActionItem] {
+        actions.filter { !$0.isCompleted && $0.priority == .high }
+    }
+
+    /// Returns actions sorted by priority (high first), then by deadline
+    var actionsSortedByPriority: [ActionItem] {
+        actions.sorted { lhs, rhs in
+            // First sort by priority
+            if lhs.priority != rhs.priority {
+                return lhs.priority < rhs.priority
+            }
+            // Then by deadline (items with deadlines come first)
+            switch (lhs.deadline, rhs.deadline) {
+            case (nil, nil):
+                return lhs.createdAt < rhs.createdAt
+            case (nil, _):
+                return false
+            case (_, nil):
+                return true
+            case let (lhsDeadline?, rhsDeadline?):
+                return lhsDeadline < rhsDeadline
+            }
+        }
     }
 
     /// Returns the number of days in the retrospective period

@@ -24,6 +24,8 @@ struct ActionItemTests {
         #expect(action.deadline == nil)
         #expect(action.completedAt == nil)
         #expect(action.fromTryItem == false)
+        #expect(action.priority == .medium)
+        #expect(action.notes == nil)
         #expect(action.id != UUID())
     }
 
@@ -32,6 +34,7 @@ struct ActionItemTests {
         let id = UUID()
         let deadline = Date().addingTimeInterval(86400) // Tomorrow
         let createdAt = Date()
+        let updatedAt = Date()
 
         let action = ActionItem(
             id: id,
@@ -40,7 +43,10 @@ struct ActionItemTests {
             deadline: deadline,
             completedAt: createdAt,
             fromTryItem: true,
-            createdAt: createdAt
+            priority: .high,
+            notes: "Test notes",
+            createdAt: createdAt,
+            updatedAt: updatedAt
         )
 
         #expect(action.id == id)
@@ -49,7 +55,10 @@ struct ActionItemTests {
         #expect(action.deadline == deadline)
         #expect(action.completedAt == createdAt)
         #expect(action.fromTryItem == true)
+        #expect(action.priority == .high)
+        #expect(action.notes == "Test notes")
         #expect(action.createdAt == createdAt)
+        #expect(action.updatedAt == updatedAt)
     }
 
     // MARK: - isOverdue Computed Property Tests
@@ -134,10 +143,11 @@ struct ActionItemTests {
 
     @Test
     func testMarkIncomplete() {
+        let now = Date()
         let action = ActionItem(
             text: "Completed action",
             isCompleted: true,
-            completedAt: Date()
+            completedAt: now
         )
 
         action.markIncomplete()
@@ -154,6 +164,191 @@ struct ActionItemTests {
 
         #expect(action.isCompleted == false)
         #expect(action.completedAt == nil)
+    }
+
+    // MARK: - toggleCompletion() Tests
+
+    @Test
+    func testToggleCompletionFromIncomplete() {
+        let action = ActionItem(text: "Test action")
+
+        #expect(action.isCompleted == false)
+
+        action.toggleCompletion()
+
+        #expect(action.isCompleted == true)
+        #expect(action.completedAt != nil)
+    }
+
+    @Test
+    func testToggleCompletionFromComplete() {
+        let action = ActionItem(text: "Test action", isCompleted: true, completedAt: Date())
+
+        action.toggleCompletion()
+
+        #expect(action.isCompleted == false)
+        #expect(action.completedAt == nil)
+    }
+
+    // MARK: - Priority Tests
+
+    @Test
+    func testPriorityUpdate() {
+        let action = ActionItem(text: "Test action")
+        let originalUpdatedAt = action.updatedAt
+
+        // Small delay to ensure timestamp difference
+        Thread.sleep(forTimeInterval: 0.01)
+
+        action.updatePriority(.high)
+
+        #expect(action.priority == .high)
+        #expect(action.updatedAt > originalUpdatedAt)
+    }
+
+    @Test
+    func testAllPriorityLevels() {
+        let highAction = ActionItem(text: "High", priority: .high)
+        let mediumAction = ActionItem(text: "Medium", priority: .medium)
+        let lowAction = ActionItem(text: "Low", priority: .low)
+
+        #expect(highAction.priority == .high)
+        #expect(mediumAction.priority == .medium)
+        #expect(lowAction.priority == .low)
+    }
+
+    // MARK: - Notes Tests
+
+    @Test
+    func testNotesUpdate() {
+        let action = ActionItem(text: "Test action")
+
+        #expect(action.hasNotes == false)
+
+        action.updateNotes("New notes")
+
+        #expect(action.notes == "New notes")
+        #expect(action.hasNotes == true)
+    }
+
+    @Test
+    func testNotesWithWhitespace() {
+        let action = ActionItem(text: "Test action")
+
+        action.updateNotes("   Trimmed notes   ")
+
+        #expect(action.notes == "Trimmed notes")
+    }
+
+    @Test
+    func testClearNotes() {
+        let action = ActionItem(text: "Test action", notes: "Some notes")
+
+        action.updateNotes(nil)
+
+        #expect(action.notes == nil)
+        #expect(action.hasNotes == false)
+    }
+
+    @Test
+    func testEmptyNotesNotConsideredAsHavingNotes() {
+        let action = ActionItem(text: "Test action", notes: "   ")
+
+        #expect(action.hasNotes == false)
+    }
+
+    // MARK: - Deadline Description Tests
+
+    @Test
+    func testDeadlineDescriptionOverdue() {
+        let pastDeadline = Date().addingTimeInterval(-86400 * 2) // 2 days ago
+        let action = ActionItem(text: "Test", deadline: pastDeadline)
+
+        let description = action.deadlineDescription
+
+        #expect(description?.contains("Overdue") == true)
+    }
+
+    @Test
+    func testDeadlineDescriptionDueToday() {
+        // Create a deadline that's today but not past yet
+        let calendar = Calendar.current
+        let endOfToday = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: Date())!
+        let action = ActionItem(text: "Test", deadline: endOfToday)
+
+        // Only test if the deadline is actually still in the future
+        if endOfToday > Date() {
+            let description = action.deadlineDescription
+
+            #expect(description == "Due today" || description == "Due tomorrow" || description?.contains("Due in") == true)
+        }
+    }
+
+    @Test
+    func testDeadlineDescriptionDueTomorrow() {
+        let tomorrowDeadline = Date().addingTimeInterval(86400) // Tomorrow
+        let action = ActionItem(text: "Test", deadline: tomorrowDeadline)
+
+        let description = action.deadlineDescription
+
+        #expect(description == "Due tomorrow" || description == "Due in 1 days")
+    }
+
+    @Test
+    func testDeadlineDescriptionNoDeadline() {
+        let action = ActionItem(text: "Test")
+
+        #expect(action.deadlineDescription == nil)
+    }
+
+    // MARK: - isDueSoon Tests
+
+    @Test
+    func testIsDueSoonWithinRange() {
+        let soonDeadline = Date().addingTimeInterval(86400 * 2) // 2 days from now
+        let action = ActionItem(text: "Test", deadline: soonDeadline)
+
+        #expect(action.isDueSoon(withinDays: 3) == true)
+    }
+
+    @Test
+    func testIsDueSoonOutsideRange() {
+        let farDeadline = Date().addingTimeInterval(86400 * 10) // 10 days from now
+        let action = ActionItem(text: "Test", deadline: farDeadline)
+
+        #expect(action.isDueSoon(withinDays: 3) == false)
+    }
+
+    @Test
+    func testIsDueSoonOverdueNotConsidered() {
+        let pastDeadline = Date().addingTimeInterval(-86400) // Yesterday
+        let action = ActionItem(text: "Test", deadline: pastDeadline)
+
+        #expect(action.isDueSoon() == false)
+    }
+
+    @Test
+    func testIsDueSoonCompletedNotConsidered() {
+        let soonDeadline = Date().addingTimeInterval(86400) // Tomorrow
+        let action = ActionItem(text: "Test", isCompleted: true, deadline: soonDeadline)
+
+        #expect(action.isDueSoon() == false)
+    }
+
+    // MARK: - touch() Tests
+
+    @Test
+    func testTouchUpdatesTimestamp() {
+        let originalUpdatedAt = Date().addingTimeInterval(-3600) // 1 hour ago
+        let action = ActionItem(text: "Test", updatedAt: originalUpdatedAt)
+
+        let beforeTouch = Date()
+        action.touch()
+        let afterTouch = Date()
+
+        #expect(action.updatedAt >= beforeTouch)
+        #expect(action.updatedAt <= afterTouch)
+        #expect(action.updatedAt > originalUpdatedAt)
     }
 }
 
@@ -921,5 +1116,408 @@ struct DataIntegrityTests {
         let action = ActionItem(id: specificID, text: "Test")
 
         #expect(action.id == specificID)
+    }
+}
+
+// MARK: - ActionPriority Tests
+
+struct ActionPriorityTests {
+
+    @Test
+    func testDisplayNames() {
+        #expect(ActionPriority.high.displayName == "High")
+        #expect(ActionPriority.medium.displayName == "Medium")
+        #expect(ActionPriority.low.displayName == "Low")
+    }
+
+    @Test
+    func testIconNames() {
+        #expect(ActionPriority.high.iconName == "exclamationmark.3")
+        #expect(ActionPriority.medium.iconName == "exclamationmark.2")
+        #expect(ActionPriority.low.iconName == "exclamationmark")
+    }
+
+    @Test
+    func testSortOrder() {
+        #expect(ActionPriority.high.sortOrder == 0)
+        #expect(ActionPriority.medium.sortOrder == 1)
+        #expect(ActionPriority.low.sortOrder == 2)
+    }
+
+    @Test
+    func testComparable() {
+        #expect(ActionPriority.high < ActionPriority.medium)
+        #expect(ActionPriority.medium < ActionPriority.low)
+        #expect(ActionPriority.high < ActionPriority.low)
+    }
+
+    @Test
+    func testCaseIterable() {
+        let allCases = ActionPriority.allCases
+
+        #expect(allCases.count == 3)
+        #expect(allCases.contains(.high))
+        #expect(allCases.contains(.medium))
+        #expect(allCases.contains(.low))
+    }
+
+    @Test
+    func testRawValues() {
+        #expect(ActionPriority.high.rawValue == "high")
+        #expect(ActionPriority.medium.rawValue == "medium")
+        #expect(ActionPriority.low.rawValue == "low")
+    }
+
+    @Test
+    func testCodable() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        for priority in ActionPriority.allCases {
+            let data = try encoder.encode(priority)
+            let decoded = try decoder.decode(ActionPriority.self, from: data)
+            #expect(decoded == priority)
+        }
+    }
+}
+
+// MARK: - ActionFilter Tests
+
+struct ActionFilterTests {
+
+    // MARK: - Initialization Tests
+
+    @Test
+    func testDefaultInitialization() {
+        let filter = ActionFilter()
+
+        #expect(filter.completionStatus == .all)
+        #expect(filter.deadlineStartDate == nil)
+        #expect(filter.deadlineEndDate == nil)
+        #expect(filter.priorities.isEmpty)
+        #expect(filter.retrospectiveId == nil)
+        #expect(filter.overdueOnly == false)
+        #expect(filter.fromTryItemOnly == false)
+        #expect(filter.sortOrder == .createdAtDescending)
+    }
+
+    @Test
+    func testCustomInitialization() {
+        let retroId = UUID()
+        let startDate = Date()
+        let endDate = Date().addingTimeInterval(86400)
+
+        let filter = ActionFilter(
+            completionStatus: .incomplete,
+            deadlineStartDate: startDate,
+            deadlineEndDate: endDate,
+            priorities: [.high, .medium],
+            retrospectiveId: retroId,
+            overdueOnly: true,
+            fromTryItemOnly: true,
+            sortOrder: .priorityHighToLow
+        )
+
+        #expect(filter.completionStatus == .incomplete)
+        #expect(filter.deadlineStartDate == startDate)
+        #expect(filter.deadlineEndDate == endDate)
+        #expect(filter.priorities.count == 2)
+        #expect(filter.retrospectiveId == retroId)
+        #expect(filter.overdueOnly == true)
+        #expect(filter.fromTryItemOnly == true)
+        #expect(filter.sortOrder == .priorityHighToLow)
+    }
+
+    // MARK: - Factory Methods Tests
+
+    @Test
+    func testIncompleteFilter() {
+        let filter = ActionFilter.incomplete
+
+        #expect(filter.completionStatus == .incomplete)
+    }
+
+    @Test
+    func testCompletedFilter() {
+        let filter = ActionFilter.completed
+
+        #expect(filter.completionStatus == .completed)
+    }
+
+    @Test
+    func testOverdueFilter() {
+        let filter = ActionFilter.overdue
+
+        #expect(filter.completionStatus == .incomplete)
+        #expect(filter.overdueOnly == true)
+    }
+
+    @Test
+    func testHighPriorityFilter() {
+        let filter = ActionFilter.highPriority
+
+        #expect(filter.completionStatus == .incomplete)
+        #expect(filter.priorities.contains(.high))
+        #expect(filter.sortOrder == .deadlineAscending)
+    }
+
+    @Test
+    func testFromTryFilter() {
+        let filter = ActionFilter.fromTry
+
+        #expect(filter.fromTryItemOnly == true)
+    }
+
+    @Test
+    func testForRetrospectiveFilter() {
+        let retroId = UUID()
+        let filter = ActionFilter.forRetrospective(retroId)
+
+        #expect(filter.retrospectiveId == retroId)
+    }
+
+    @Test
+    func testDueSoonFilter() {
+        let filter = ActionFilter.dueSoon(days: 5)
+
+        #expect(filter.completionStatus == .incomplete)
+        #expect(filter.deadlineStartDate != nil)
+        #expect(filter.deadlineEndDate != nil)
+        #expect(filter.sortOrder == .deadlineAscending)
+    }
+
+    // MARK: - Filter Application Tests
+
+    @Test
+    func testApplyCompletionStatusFilter() {
+        let completed = ActionItem(text: "Done", isCompleted: true, completedAt: Date())
+        let incomplete = ActionItem(text: "Not done", isCompleted: false)
+        let actions = [completed, incomplete]
+
+        let completedFilter = ActionFilter(completionStatus: .completed)
+        let incompleteFilter = ActionFilter(completionStatus: .incomplete)
+        let allFilter = ActionFilter(completionStatus: .all)
+
+        let completedResult = completedFilter.apply(to: actions)
+        let incompleteResult = incompleteFilter.apply(to: actions)
+        let allResult = allFilter.apply(to: actions)
+
+        #expect(completedResult.count == 1)
+        #expect(completedResult.first?.isCompleted == true)
+        #expect(incompleteResult.count == 1)
+        #expect(incompleteResult.first?.isCompleted == false)
+        #expect(allResult.count == 2)
+    }
+
+    @Test
+    func testApplyPriorityFilter() {
+        let highAction = ActionItem(text: "High", priority: .high)
+        let mediumAction = ActionItem(text: "Medium", priority: .medium)
+        let lowAction = ActionItem(text: "Low", priority: .low)
+        let actions = [highAction, mediumAction, lowAction]
+
+        let highFilter = ActionFilter(priorities: [.high])
+        let highMediumFilter = ActionFilter(priorities: [.high, .medium])
+
+        let highResult = highFilter.apply(to: actions)
+        let highMediumResult = highMediumFilter.apply(to: actions)
+
+        #expect(highResult.count == 1)
+        #expect(highMediumResult.count == 2)
+    }
+
+    @Test
+    func testApplyFromTryFilter() {
+        let fromTry = ActionItem(text: "From Try", fromTryItem: true)
+        let notFromTry = ActionItem(text: "Not from Try", fromTryItem: false)
+        let actions = [fromTry, notFromTry]
+
+        let filter = ActionFilter(fromTryItemOnly: true)
+        let result = filter.apply(to: actions)
+
+        #expect(result.count == 1)
+        #expect(result.first?.fromTryItem == true)
+    }
+
+    @Test
+    func testApplyDeadlineRangeFilter() {
+        let now = Date()
+        let yesterday = now.addingTimeInterval(-86400)
+        let tomorrow = now.addingTimeInterval(86400)
+        let nextWeek = now.addingTimeInterval(86400 * 7)
+
+        let pastAction = ActionItem(text: "Past", deadline: yesterday)
+        let soonAction = ActionItem(text: "Soon", deadline: tomorrow)
+        let farAction = ActionItem(text: "Far", deadline: nextWeek)
+        let noDeadline = ActionItem(text: "No deadline")
+        let actions = [pastAction, soonAction, farAction, noDeadline]
+
+        let filter = ActionFilter(
+            deadlineStartDate: now,
+            deadlineEndDate: now.addingTimeInterval(86400 * 3)
+        )
+        let result = filter.apply(to: actions)
+
+        #expect(result.count == 1)
+        #expect(result.first?.text == "Soon")
+    }
+
+    @Test
+    func testApplyOverdueFilter() {
+        let yesterday = Date().addingTimeInterval(-86400)
+        let tomorrow = Date().addingTimeInterval(86400)
+
+        let overdueAction = ActionItem(text: "Overdue", deadline: yesterday)
+        let notOverdueAction = ActionItem(text: "Not overdue", deadline: tomorrow)
+        let completedOverdue = ActionItem(text: "Completed overdue", isCompleted: true, deadline: yesterday, completedAt: Date())
+        let actions = [overdueAction, notOverdueAction, completedOverdue]
+
+        let filter = ActionFilter(overdueOnly: true)
+        let result = filter.apply(to: actions)
+
+        #expect(result.count == 1)
+        #expect(result.first?.text == "Overdue")
+    }
+
+    // MARK: - Sorting Tests
+
+    @Test
+    func testSortByCreatedAtAscending() {
+        let older = ActionItem(text: "Older", createdAt: Date().addingTimeInterval(-3600))
+        let newer = ActionItem(text: "Newer", createdAt: Date())
+        let actions = [newer, older]
+
+        let filter = ActionFilter(sortOrder: .createdAtAscending)
+        let result = filter.apply(to: actions)
+
+        #expect(result.first?.text == "Older")
+        #expect(result.last?.text == "Newer")
+    }
+
+    @Test
+    func testSortByCreatedAtDescending() {
+        let older = ActionItem(text: "Older", createdAt: Date().addingTimeInterval(-3600))
+        let newer = ActionItem(text: "Newer", createdAt: Date())
+        let actions = [older, newer]
+
+        let filter = ActionFilter(sortOrder: .createdAtDescending)
+        let result = filter.apply(to: actions)
+
+        #expect(result.first?.text == "Newer")
+        #expect(result.last?.text == "Older")
+    }
+
+    @Test
+    func testSortByPriorityHighToLow() {
+        let high = ActionItem(text: "High", priority: .high)
+        let low = ActionItem(text: "Low", priority: .low)
+        let medium = ActionItem(text: "Medium", priority: .medium)
+        let actions = [low, medium, high]
+
+        let filter = ActionFilter(sortOrder: .priorityHighToLow)
+        let result = filter.apply(to: actions)
+
+        #expect(result[0].priority == .high)
+        #expect(result[1].priority == .medium)
+        #expect(result[2].priority == .low)
+    }
+
+    @Test
+    func testSortByPriorityLowToHigh() {
+        let high = ActionItem(text: "High", priority: .high)
+        let low = ActionItem(text: "Low", priority: .low)
+        let medium = ActionItem(text: "Medium", priority: .medium)
+        let actions = [high, medium, low]
+
+        let filter = ActionFilter(sortOrder: .priorityLowToHigh)
+        let result = filter.apply(to: actions)
+
+        #expect(result[0].priority == .low)
+        #expect(result[1].priority == .medium)
+        #expect(result[2].priority == .high)
+    }
+
+    @Test
+    func testSortByDeadlineAscending() {
+        let soon = ActionItem(text: "Soon", deadline: Date().addingTimeInterval(86400))
+        let later = ActionItem(text: "Later", deadline: Date().addingTimeInterval(86400 * 7))
+        let noDeadline = ActionItem(text: "No deadline")
+        let actions = [noDeadline, later, soon]
+
+        let filter = ActionFilter(sortOrder: .deadlineAscending)
+        let result = filter.apply(to: actions)
+
+        // Items with deadlines should come first, sorted by date
+        #expect(result[0].text == "Soon")
+        #expect(result[1].text == "Later")
+        #expect(result[2].text == "No deadline")
+    }
+
+    // MARK: - Equatable Tests
+
+    @Test
+    func testFilterEquality() {
+        let filter1 = ActionFilter(completionStatus: .incomplete, priorities: [.high])
+        let filter2 = ActionFilter(completionStatus: .incomplete, priorities: [.high])
+        let filter3 = ActionFilter(completionStatus: .completed, priorities: [.high])
+
+        #expect(filter1 == filter2)
+        #expect(filter1 != filter3)
+    }
+}
+
+// MARK: - ActionStatistics Tests
+
+struct ActionStatisticsTests {
+
+    @Test
+    func testFormattedCompletionRate() {
+        let stats = ActionStatistics(
+            total: 10,
+            completed: 7,
+            incomplete: 3,
+            overdue: 1,
+            highPriority: 2,
+            mediumPriority: 3,
+            lowPriority: 1,
+            fromTry: 4,
+            completionRate: 0.7
+        )
+
+        #expect(stats.formattedCompletionRate == "70%")
+    }
+
+    @Test
+    func testZeroCompletionRate() {
+        let stats = ActionStatistics(
+            total: 5,
+            completed: 0,
+            incomplete: 5,
+            overdue: 2,
+            highPriority: 1,
+            mediumPriority: 2,
+            lowPriority: 2,
+            fromTry: 1,
+            completionRate: 0.0
+        )
+
+        #expect(stats.formattedCompletionRate == "0%")
+    }
+
+    @Test
+    func testFullCompletionRate() {
+        let stats = ActionStatistics(
+            total: 5,
+            completed: 5,
+            incomplete: 0,
+            overdue: 0,
+            highPriority: 0,
+            mediumPriority: 0,
+            lowPriority: 0,
+            fromTry: 2,
+            completionRate: 1.0
+        )
+
+        #expect(stats.formattedCompletionRate == "100%")
     }
 }
