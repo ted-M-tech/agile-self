@@ -9,11 +9,12 @@ import Foundation
 import HealthKit
 
 /// Manager for reading health data from HealthKit
+@MainActor
 @Observable
 final class HealthKitManager {
     static let shared = HealthKitManager()
 
-    private let healthStore: HKHealthStore?
+    private nonisolated let healthStore: HKHealthStore?
 
     // MARK: - Authorization State
 
@@ -37,7 +38,7 @@ final class HealthKitManager {
 
     // MARK: - Data Types
 
-    private let readTypes: Set<HKObjectType> = {
+    private nonisolated let readTypes: Set<HKObjectType> = {
         var types = Set<HKObjectType>()
 
         // Activity

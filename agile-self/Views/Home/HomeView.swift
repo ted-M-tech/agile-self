@@ -21,7 +21,7 @@ struct HomeView: View {
     let onNewRetro: () -> Void
     let onShowSettings: () -> Void
 
-    private var healthManager = HealthKitManager.shared
+    @State private var healthManager = HealthKitManager.shared
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -431,15 +431,11 @@ private struct KPTAMiniCount: View {
 // MARK: - Preview
 
 #Preview {
-    do {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(
-            for: ActionItem.self, Retrospective.self, KPTAItem.self, HealthSummary.self,
-            configurations: config
-        )
-        return HomeView(onNewRetro: {}, onShowSettings: {})
-            .modelContainer(container)
-    } catch {
-        return Text("Preview Error: \(error.localizedDescription)")
-    }
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(
+        for: ActionItem.self, Retrospective.self, KPTAItem.self, HealthSummary.self,
+        configurations: config
+    )
+    HomeView(onNewRetro: {}, onShowSettings: {})
+        .modelContainer(container)
 }
