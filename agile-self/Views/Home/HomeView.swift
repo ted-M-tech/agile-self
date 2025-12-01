@@ -21,6 +21,8 @@ struct HomeView: View {
     let onNewRetro: () -> Void
     let onShowSettings: () -> Void
 
+    private var healthManager = HealthKitManager.shared
+
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
@@ -46,6 +48,9 @@ struct HomeView: View {
                     // New Retrospective CTA
                     newRetroCTA
                         .padding(.top, Theme.Spacing.sm)
+
+                    // Health Data Section
+                    healthSection
 
                     // Quick Stats
                     statsRow
@@ -81,6 +86,12 @@ struct HomeView: View {
                     }
                 }
             }
+            .task {
+                await healthManager.requestAuthorization()
+            }
+            .refreshable {
+                await healthManager.fetchTodayData()
+            }
         }
     }
 
@@ -114,6 +125,96 @@ struct HomeView: View {
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Health Section
+
+    private var healthSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack {
+                Image(systemName: "heart.fill")
+                    .foregroundStyle(.red)
+                Text("Today's Health")
+                    .font(Theme.Typography.headline)
+                Spacer()
+
+                if healthManager.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+            }
+
+            if healthManager.authorizationStatus == .unavailable {
+                healthUnavailableView
+            } else if healthManager.authorizationStatus == .denied {
+                healthDeniedView
+            } else {
+                healthDataGrid
+            }
+        }
+        .padding(Theme.Spacing.md)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+    }
+
+    private var healthDataGrid: some View {
+        LazyVGrid(columns: [
+            GridItem(.flexible()),
+            GridItem(.flexible())
+        ], spacing: Theme.Spacing.sm) {
+            HealthMetricCard(
+                icon: "bed.double.fill",
+                value: healthManager.formattedTodaySleep,
+                label: "Sleep",
+                color: .indigo
+            )
+
+            HealthMetricCard(
+                icon: "figure.walk",
+                value: healthManager.formattedTodaySteps,
+                label: "Steps",
+                color: .orange
+            )
+
+            HealthMetricCard(
+                icon: "flame.fill",
+                value: healthManager.formattedTodayCalories,
+                label: "Active Cal",
+                color: .pink
+            )
+
+            HealthMetricCard(
+                icon: "figure.run",
+                value: healthManager.formattedTodayExercise,
+                label: "Exercise",
+                color: .green
+            )
+        }
+    }
+
+    private var healthUnavailableView: some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(.secondary)
+            Text("Health data not available on this device")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.md)
+    }
+
+    private var healthDeniedView: some View {
+        VStack(spacing: Theme.Spacing.xs) {
+            Text("Health access not granted")
+                .font(Theme.Typography.callout)
+                .foregroundStyle(.secondary)
+            Text("Enable in Settings > Privacy > Health")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.md)
     }
 
     // MARK: - Stats Row
@@ -217,6 +318,39 @@ struct HomeView: View {
         .padding(Theme.Spacing.md)
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+    }
+}
+
+// MARK: - Health Metric Card
+
+private struct HealthMetricCard: View {
+    let icon: String
+    let value: String
+    let label: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(color)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(Theme.Typography.headline)
+                    .fontWeight(.semibold)
+
+                Text(label)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(Theme.Spacing.sm)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
     }
 }
 
