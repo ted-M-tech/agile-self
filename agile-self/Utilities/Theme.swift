@@ -108,9 +108,35 @@ enum Theme {
     }
 }
 
+// MARK: - Animation
+
+extension Theme {
+    enum Animation {
+        static let quick = SwiftUI.Animation.easeInOut(duration: 0.15)
+        static let standard = SwiftUI.Animation.easeInOut(duration: 0.25)
+        static let smooth = SwiftUI.Animation.spring(response: 0.35, dampingFraction: 0.8)
+        static let bouncy = SwiftUI.Animation.spring(response: 0.4, dampingFraction: 0.6)
+    }
+}
+
+// MARK: - Shadows
+
+extension Theme {
+    enum Shadow {
+        static func small(_ colorScheme: ColorScheme) -> some View {
+            Color.black.opacity(colorScheme == .dark ? 0.3 : 0.08)
+        }
+
+        static func medium(_ colorScheme: ColorScheme) -> some View {
+            Color.black.opacity(colorScheme == .dark ? 0.4 : 0.12)
+        }
+    }
+}
+
 // MARK: - View Extensions
 
 extension View {
+    /// Apply KPTA card styling with category-specific background
     func kptaCardStyle(category: KPTACategory) -> some View {
         self
             .padding(Theme.Spacing.md)
@@ -122,10 +148,42 @@ extension View {
             )
     }
 
+    /// Apply standard card styling with material background
     func cardStyle() -> some View {
         self
             .padding(Theme.Spacing.md)
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+    }
+
+    /// Apply elevated card styling with shadow
+    func elevatedCardStyle() -> some View {
+        self
+            .padding(Theme.Spacing.md)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+            .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+    }
+
+    /// Apply action button styling
+    func actionButtonStyle(color: Color = Theme.KPTA.action) -> some View {
+        self
+            .font(Theme.Typography.callout.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.vertical, Theme.Spacing.sm)
+            .background(color)
+            .clipShape(Capsule())
+    }
+
+    /// Apply secondary button styling
+    func secondaryButtonStyle(color: Color = Theme.KPTA.action) -> some View {
+        self
+            .font(Theme.Typography.callout.weight(.medium))
+            .foregroundStyle(color)
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.xs)
+            .background(color.opacity(0.15))
+            .clipShape(Capsule())
     }
 }

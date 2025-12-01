@@ -10,7 +10,10 @@ import SwiftData
 
 @main
 struct agile_selfApp: App {
-    var sharedModelContainer: ModelContainer = {
+    private let sharedModelContainer: ModelContainer?
+    @State private var containerError: Error?
+
+    init() {
         let schema = Schema([
             Retrospective.self,
             KPTAItem.self,
@@ -25,16 +28,60 @@ struct agile_selfApp: App {
         )
 
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            self.sharedModelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            self.sharedModelContainer = nil
+            print("Could not create ModelContainer: \(error)")
         }
-    }()
+    }
 
     var body: some Scene {
         WindowGroup {
-            MainTabView()
+            if let container = sharedModelContainer {
+                MainTabView()
+                    .modelContainer(container)
+            } else {
+                DatabaseErrorView()
+            }
         }
-        .modelContainer(sharedModelContainer)
+    }
+}
+
+// MARK: - Database Error View
+
+struct DatabaseErrorView: View {
+    var body: some View {
+        VStack(spacing: Theme.Spacing.lg) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 60))
+                .foregroundStyle(.orange)
+
+            Text("Unable to Load Data")
+                .font(Theme.Typography.title2)
+                .fontWeight(.semibold)
+
+            Text("There was a problem loading your data. Please try restarting the app or contact support if the issue persists.")
+                .font(Theme.Typography.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Theme.Spacing.xl)
+
+            Button {
+                // Attempt to restart or provide recovery option
+                #if os(iOS)
+                exit(0)
+                #endif
+            } label: {
+                Text("Restart App")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Theme.Spacing.md)
+                    .background(Theme.KPTA.action)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+            }
+            .padding(.horizontal, Theme.Spacing.xl)
+        }
+        .padding()
     }
 }
