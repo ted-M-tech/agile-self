@@ -37,6 +37,7 @@ Alternatively, open `agile-self.xcodeproj` in Xcode and use Cmd+B to build, Cmd+
 | Data Layer | SwiftData |
 | Cloud Sync | CloudKit (via SwiftData) |
 | Health Data | HealthKit |
+| Screen Time | DeviceActivity / FamilyControls |
 | Minimum iOS | iOS 17.0 |
 
 ## Project Structure
@@ -80,11 +81,18 @@ agile-self/
 ├── Services/
 │   ├── HealthKit/
 │   │   └── HealthKitManager.swift   # Health data fetching
+│   ├── ScreenTime/
+│   │   ├── ScreenTimeManager.swift  # FamilyControls authorization
+│   │   └── ScreenTimeContext.swift  # DeviceActivityReport context
 │   └── Actions/
-│       ├── ActionService.swift
 │       └── ActionFilter.swift
 └── Utilities/
     └── Theme.swift                  # Colors, spacing, typography
+
+ScreenTimeReport/                    # App Extension
+├── ScreenTimeReport.swift           # @main extension entry
+├── TotalActivityReport.swift        # Report scene
+└── TotalActivityView.swift          # SwiftUI view for report
 ```
 
 ## Key Concepts
@@ -135,6 +143,13 @@ Settings opens as a sheet from the Home screen navigation bar.
 - Handle authorization denial gracefully
 - Use @MainActor for HealthKitManager
 
+### Screen Time (DeviceActivity)
+- Requires FamilyControls entitlement (privileged - needs Apple approval for App Store)
+- Uses DeviceActivityReportExtension to display usage data
+- Data stays sandboxed in extension view (cannot extract to main app)
+- Request authorization via AuthorizationCenter.shared.requestAuthorization(for: .individual)
+- DeviceActivityReport SwiftUI view renders the extension's content
+
 ### Concurrency
 - Project uses SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
 - Mark nonisolated properties that don't need MainActor
@@ -162,9 +177,13 @@ final class HealthKitManager {
 
 ## Xcode Capabilities Required
 
-### iOS Target
+### iOS Target (agile-self)
 - HealthKit
 - iCloud (CloudKit)
+- Family Controls
+
+### ScreenTimeReport Extension
+- Family Controls
 
 ### Info.plist Keys (via Build Settings)
 - NSHealthShareUsageDescription
