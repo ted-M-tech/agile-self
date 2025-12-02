@@ -7,6 +7,16 @@
 
 import SwiftUI
 import SwiftData
+import DeviceActivity
+import FamilyControls
+
+// MARK: - DeviceActivityReport Context Extension
+
+extension DeviceActivityReport.Context {
+    /// Context for displaying total daily screen time
+    /// Must match the context defined in ScreenTimeReport extension
+    static let totalActivity = Self("Total Activity")
+}
 
 /// Clean, minimal home screen following Apple design guidelines
 struct HomeView: View {
@@ -22,6 +32,18 @@ struct HomeView: View {
     let onShowSettings: () -> Void
 
     @State private var healthManager = HealthKitManager.shared
+    @State private var screenTimeManager = ScreenTimeManager.shared
+
+    /// Filter for today's screen time data
+    private var screenTimeFilter: DeviceActivityFilter {
+        DeviceActivityFilter(
+            segment: .daily(
+                during: Calendar.current.dateInterval(of: .day, for: Date())!
+            ),
+            users: .all,
+            devices: .init([.iPhone])
+        )
+    }
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -51,6 +73,9 @@ struct HomeView: View {
 
                     // Health Data Section
                     healthSection
+
+                    // Screen Time Section
+                    screenTimeSection
 
                     // Quick Stats
                     statsRow
@@ -88,6 +113,7 @@ struct HomeView: View {
             }
             .task {
                 await healthManager.requestAuthorization()
+                await screenTimeManager.requestAuthorization()
             }
             .refreshable {
                 await healthManager.fetchTodayData()
@@ -210,6 +236,66 @@ struct HomeView: View {
                 .font(Theme.Typography.callout)
                 .foregroundStyle(.secondary)
             Text("Enable in Settings > Privacy > Health")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.md)
+    }
+
+    // MARK: - Screen Time Section
+
+    private var screenTimeSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack {
+                Image(systemName: "hourglass")
+                    .foregroundStyle(.cyan)
+                Text("Screen Time")
+                    .font(Theme.Typography.headline)
+                Spacer()
+            }
+
+            switch screenTimeManager.authorizationStatus {
+            case .notDetermined:
+                screenTimeNotDeterminedView
+            case .denied:
+                screenTimeDeniedView
+            case .authorized:
+                DeviceActivityReport(.totalActivity, filter: screenTimeFilter)
+                    .frame(height: 52)
+            }
+        }
+        .padding(Theme.Spacing.md)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+    }
+
+    private var screenTimeNotDeterminedView: some View {
+        Button {
+            Task {
+                await screenTimeManager.requestAuthorization()
+            }
+        } label: {
+            HStack {
+                Text("Tap to enable Screen Time access")
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, Theme.Spacing.sm)
+    }
+
+    private var screenTimeDeniedView: some View {
+        VStack(spacing: Theme.Spacing.xs) {
+            Text("Screen Time access not granted")
+                .font(Theme.Typography.callout)
+                .foregroundStyle(.secondary)
+            Text("Enable in Settings > Screen Time")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(.tertiary)
         }
