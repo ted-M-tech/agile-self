@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		A71FC00E2EDCF67F00467EF7 /* agile-self Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A71FC00D2EDCF67F00467EF7 /* agile-self Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A71FC1882EDDA39200467EF7 /* ScreenTimeReport.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = A71FC17C2EDDA39200467EF7 /* ScreenTimeReport.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A769DBE52EDE77DB005F9566 /* DeviceActivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A769DBE42EDE77DB005F9566 /* DeviceActivity.framework */; };
+		A769DBE62EDE84E6005F9566 /* DeviceActivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A769DBE42EDE77DB005F9566 /* DeviceActivity.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,6 +49,13 @@
 			remoteGlobalIDString = A71FC00C2EDCF67F00467EF7;
 			remoteInfo = "agile-self Watch App";
 		};
+		A71FC1862EDDA39200467EF7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A71FBFE22EDCF67D00467EF7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A71FC17B2EDDA39200467EF7;
+			remoteInfo = ScreenTimeReport;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -60,6 +70,27 @@
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A71FC1772EDDA2AB00467EF7 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A71FC18D2EDDA39200467EF7 /* Embed ExtensionKit Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				A71FC1882EDDA39200467EF7 /* ScreenTimeReport.appex in Embed ExtensionKit Extensions */,
+			);
+			name = "Embed ExtensionKit Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -69,7 +100,20 @@
 		A71FC00D2EDCF67F00467EF7 /* agile-self Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "agile-self Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A71FC01C2EDCF67F00467EF7 /* agile-self Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "agile-self Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A71FC0262EDCF68000467EF7 /* agile-self Watch AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "agile-self Watch AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A71FC1692EDDA2AB00467EF7 /* DeviceActivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeviceActivity.framework; path = System/Library/Frameworks/DeviceActivity.framework; sourceTree = SDKROOT; };
+		A71FC17C2EDDA39200467EF7 /* ScreenTimeReport.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = ScreenTimeReport.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A769DBE42EDE77DB005F9566 /* DeviceActivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeviceActivity.framework; path = System/Library/Frameworks/DeviceActivity.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A71FC1892EDDA39200467EF7 /* Exceptions for "ScreenTimeReport" folder in "ScreenTimeReport" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A71FC17B2EDDA39200467EF7 /* ScreenTimeReport */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A71FBFEC2EDCF67D00467EF7 /* agile-self */ = {
@@ -102,6 +146,14 @@
 			path = "agile-self Watch AppUITests";
 			sourceTree = "<group>";
 		};
+		A71FC17D2EDDA39200467EF7 /* ScreenTimeReport */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A71FC1892EDDA39200467EF7 /* Exceptions for "ScreenTimeReport" folder in "ScreenTimeReport" target */,
+			);
+			path = ScreenTimeReport;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,6 +161,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A769DBE62EDE84E6005F9566 /* DeviceActivity.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -147,6 +200,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A71FC1792EDDA39200467EF7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A769DBE52EDE77DB005F9566 /* DeviceActivity.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -159,6 +220,8 @@
 				A71FC0112EDCF67F00467EF7 /* agile-self Watch App */,
 				A71FC01F2EDCF67F00467EF7 /* agile-self Watch AppTests */,
 				A71FC0292EDCF68000467EF7 /* agile-self Watch AppUITests */,
+				A71FC17D2EDDA39200467EF7 /* ScreenTimeReport */,
+				A71FC1682EDDA2AB00467EF7 /* Frameworks */,
 				A71FBFEB2EDCF67D00467EF7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -172,8 +235,18 @@
 				A71FC00D2EDCF67F00467EF7 /* agile-self Watch App.app */,
 				A71FC01C2EDCF67F00467EF7 /* agile-self Watch AppTests.xctest */,
 				A71FC0262EDCF68000467EF7 /* agile-self Watch AppUITests.xctest */,
+				A71FC17C2EDDA39200467EF7 /* ScreenTimeReport.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A71FC1682EDDA2AB00467EF7 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A769DBE42EDE77DB005F9566 /* DeviceActivity.framework */,
+				A71FC1692EDDA2AB00467EF7 /* DeviceActivity.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -187,11 +260,14 @@
 				A71FBFE72EDCF67D00467EF7 /* Frameworks */,
 				A71FBFE82EDCF67D00467EF7 /* Resources */,
 				A71FC0332EDCF68000467EF7 /* Embed Watch Content */,
+				A71FC1772EDDA2AB00467EF7 /* Embed Foundation Extensions */,
+				A71FC18D2EDDA39200467EF7 /* Embed ExtensionKit Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				A71FC0102EDCF67F00467EF7 /* PBXTargetDependency */,
+				A71FC1872EDDA39200467EF7 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A71FBFEC2EDCF67D00467EF7 /* agile-self */,
@@ -317,6 +393,28 @@
 			productReference = A71FC0262EDCF68000467EF7 /* agile-self Watch AppUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		A71FC17B2EDDA39200467EF7 /* ScreenTimeReport */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A71FC18A2EDDA39200467EF7 /* Build configuration list for PBXNativeTarget "ScreenTimeReport" */;
+			buildPhases = (
+				A71FC1782EDDA39200467EF7 /* Sources */,
+				A71FC1792EDDA39200467EF7 /* Frameworks */,
+				A71FC17A2EDDA39200467EF7 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A71FC17D2EDDA39200467EF7 /* ScreenTimeReport */,
+			);
+			name = ScreenTimeReport;
+			packageProductDependencies = (
+			);
+			productName = ScreenTimeReport;
+			productReference = A71FC17C2EDDA39200467EF7 /* ScreenTimeReport.appex */;
+			productType = "com.apple.product-type.extensionkit-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -349,6 +447,9 @@
 						CreatedOnToolsVersion = 26.1.1;
 						TestTargetID = A71FC00C2EDCF67F00467EF7;
 					};
+					A71FC17B2EDDA39200467EF7 = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
 				};
 			};
 			buildConfigurationList = A71FBFE52EDCF67D00467EF7 /* Build configuration list for PBXProject "agile-self" */;
@@ -371,6 +472,7 @@
 				A71FC00C2EDCF67F00467EF7 /* agile-self Watch App */,
 				A71FC01B2EDCF67F00467EF7 /* agile-self Watch AppTests */,
 				A71FC0252EDCF68000467EF7 /* agile-self Watch AppUITests */,
+				A71FC17B2EDDA39200467EF7 /* ScreenTimeReport */,
 			);
 		};
 /* End PBXProject section */
@@ -412,6 +514,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A71FC0242EDCF68000467EF7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A71FC17A2EDDA39200467EF7 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -463,6 +572,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A71FC1782EDDA39200467EF7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -490,6 +606,11 @@
 			isa = PBXTargetDependency;
 			target = A71FC00C2EDCF67F00467EF7 /* agile-self Watch App */;
 			targetProxy = A71FC0272EDCF68000467EF7 /* PBXContainerItemProxy */;
+		};
+		A71FC1872EDDA39200467EF7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A71FC17B2EDDA39200467EF7 /* ScreenTimeReport */;
+			targetProxy = A71FC1862EDDA39200467EF7 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -932,6 +1053,67 @@
 			};
 			name = Release;
 		};
+		A71FC18B2EDDA39200467EF7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ScreenTimeReport/ScreenTimeReport.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ScreenTimeReport/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ScreenTimeReport;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "tetsuya.agile-self.ScreenTimeReport";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A71FC18C2EDDA39200467EF7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ScreenTimeReport/ScreenTimeReport.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ScreenTimeReport/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ScreenTimeReport;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "tetsuya.agile-self.ScreenTimeReport";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -994,6 +1176,15 @@
 			buildConfigurations = (
 				A71FC0412EDCF68000467EF7 /* Debug */,
 				A71FC0422EDCF68000467EF7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A71FC18A2EDDA39200467EF7 /* Build configuration list for PBXNativeTarget "ScreenTimeReport" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A71FC18B2EDDA39200467EF7 /* Debug */,
+				A71FC18C2EDDA39200467EF7 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
