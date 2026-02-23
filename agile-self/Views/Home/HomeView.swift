@@ -2,48 +2,30 @@
 //  HomeView.swift
 //  agile-self
 //
-//  Created by Claude on 2025/12/01.
+//  Home Dashboard with score trends, dimension cards, AI insights, and health data.
 //
 
 import SwiftUI
 import SwiftData
-import DeviceActivity
-import FamilyControls
+import Charts
 
-// MARK: - DeviceActivityReport Context Extension
-
-extension DeviceActivityReport.Context {
-    /// Context for displaying total daily screen time
-    /// Must match the context defined in ScreenTimeReport extension
-    static let totalActivity = Self("Total Activity")
-}
-
-/// Clean, minimal home screen following Apple design guidelines
 struct HomeView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<ActionItem> { !$0.isCompleted },
-           sort: [SortDescriptor(\ActionItem.deadline, order: .forward)])
-    private var pendingActions: [ActionItem]
-
-    @Query(sort: [SortDescriptor(\Retrospective.createdAt, order: .reverse)])
-    private var retrospectives: [Retrospective]
-
-    let onNewRetro: () -> Void
     let onShowSettings: () -> Void
+    let onLogCheckIn: () -> Void
 
-    @State private var healthManager = HealthKitManager.shared
-    @State private var screenTimeManager = ScreenTimeManager.shared
+    // MARK: - Mock Data (prototype: swap to @Query for production)
 
-    /// Filter for today's screen time data
-    private var screenTimeFilter: DeviceActivityFilter {
-        DeviceActivityFilter(
-            segment: .daily(
-                during: Calendar.current.dateInterval(of: .day, for: Date())!
-            ),
-            users: .all,
-            devices: .init([.iPhone])
-        )
-    }
+    @State private var weeklyCheckIns = MockData.weeklyCheckIns
+    @State private var todayCheckIn: DailyCheckIn? = MockData.todayCheckIn
+    @State private var todayHealth: HealthSnapshot? = MockData.todayHealth
+    @State private var streak = MockData.streak
+
+    // MARK: - Animation State
+
+    @State private var dimensionsAppeared = false
+    @State private var ctaPulse = false
+
+    // MARK: - Computed
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -55,473 +37,243 @@ struct HomeView: View {
         }
     }
 
-    private var overdueActions: [ActionItem] {
-        pendingActions.filter { $0.isOverdue }
+    private var userName: String {
+        MockData.userProfile.displayName ?? "there"
     }
 
-    private var upcomingActions: [ActionItem] {
-        Array(pendingActions.filter { !$0.isOverdue }.prefix(3))
+    private var formattedDate: String {
+        Date().formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
+    }
+
+    private var isEvening: Bool {
+        Calendar.current.component(.hour, from: Date()) >= 20
+    }
+
+    private var shouldShowCTAPulse: Bool {
+        isEvening && todayCheckIn == nil
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
-                    // New Retrospective CTA
-                    newRetroCTA
-                        .padding(.top, Theme.Spacing.sm)
-
-                    // Health Data Section
+                    headerSection
+                    scoreTrendSection
+                    dimensionGridSection
+                    aiInsightSection
                     healthSection
-
-                    // Screen Time Section
-                    screenTimeSection
-
-                    // Quick Stats
-                    statsRow
-
-                    // Overdue Actions (if any)
-                    if !overdueActions.isEmpty {
-                        overdueSection
-                    }
-
-                    // Upcoming Actions
-                    if !upcomingActions.isEmpty {
-                        upcomingSection
-                    }
-
-                    // Recent Retrospective
-                    if let recent = retrospectives.first {
-                        recentRetroSection(recent)
-                    }
-
+                    checkInCTA
                     Spacer(minLength: Theme.Spacing.xxl)
                 }
                 .padding(.horizontal, Theme.Spacing.md)
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle(greeting)
+            .background(Theme.Colors.backgroundPrimary)
+            .scrollIndicators(.hidden)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        onShowSettings()
-                    } label: {
+                    Button(action: onShowSettings) {
                         Image(systemName: "gearshape")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.Colors.textSecondary)
                     }
                 }
             }
-            .task {
-                await healthManager.requestAuthorization()
-                await screenTimeManager.requestAuthorization()
-            }
-            .refreshable {
-                await healthManager.fetchTodayData()
-            }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
     }
 
-    // MARK: - New Retro CTA
+    // MARK: - 1. Header
 
-    private var newRetroCTA: some View {
-        Button(action: onNewRetro) {
-            HStack(spacing: Theme.Spacing.md) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(Theme.KPTA.action)
+    private var headerSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text("\(greeting), \(userName)")
+                .font(Theme.Typography.title2)
+                .foregroundStyle(Theme.Colors.textPrimary)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("New Retrospective")
-                        .font(Theme.Typography.headline)
-                        .foregroundStyle(.primary)
-
-                    Text("Daily, Weekly, or Monthly")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(Theme.Spacing.md)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+            Text(formattedDate)
+                .font(Theme.Typography.footnote)
+                .foregroundStyle(Theme.Colors.textSecondary)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, Theme.Spacing.sm)
     }
 
-    // MARK: - Health Section
+    // MARK: - 2. Score Trend
+
+    private var scoreTrendSection: some View {
+        ScoreTrendChart(checkIns: weeklyCheckIns)
+    }
+
+    // MARK: - 3. Dimension Grid
+
+    private var dimensionGridSection: some View {
+        LazyVGrid(
+            columns: [GridItem(.flexible()), GridItem(.flexible())],
+            spacing: Theme.Spacing.md
+        ) {
+            ForEach(Array(DimensionType.allCases.enumerated()), id: \.element) { index, dimension in
+                DimensionCard(
+                    dimension: dimension,
+                    score: todayCheckIn?.score(for: dimension) ?? 0
+                )
+                .opacity(dimensionsAppeared ? 1 : 0)
+                .offset(y: dimensionsAppeared ? 0 : 20)
+                .animation(
+                    Theme.Animation.stagger(index: index),
+                    value: dimensionsAppeared
+                )
+            }
+        }
+        .onAppear {
+            dimensionsAppeared = true
+        }
+    }
+
+    // MARK: - 4. AI Insight
+
+    private var aiInsightSection: some View {
+        AIInsightCard(insight: todayCheckIn?.dailyInsight)
+    }
+
+    // MARK: - 5. Health Metrics
 
     private var healthSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack {
-                Image(systemName: "heart.fill")
-                    .foregroundStyle(.red)
-                Text("Today's Health")
-                    .font(Theme.Typography.headline)
-                Spacer()
+            Text("TODAY'S HEALTH")
+                .font(Theme.Typography.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .tracking(1.2)
+                .padding(.leading, Theme.Spacing.xs)
 
-                if healthManager.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.8)
+            ScrollView(.horizontal) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    if let health = todayHealth {
+                        if let sleep = health.formattedSleep {
+                            HealthMetricCard(
+                                icon: "bed.double.fill",
+                                value: sleep,
+                                label: "Sleep",
+                                color: .indigo
+                            )
+                        }
+                        if let steps = health.formattedSteps {
+                            HealthMetricCard(
+                                icon: "figure.walk",
+                                value: steps,
+                                label: "Steps",
+                                color: .orange
+                            )
+                        }
+                        if let heartRate = health.formattedHeartRate {
+                            HealthMetricCard(
+                                icon: "heart.fill",
+                                value: heartRate,
+                                label: "Heart Rate",
+                                color: .red
+                            )
+                        }
+                        if let screenTime = health.formattedScreenTime {
+                            HealthMetricCard(
+                                icon: "iphone",
+                                value: screenTime,
+                                label: "Screen Time",
+                                color: .cyan
+                            )
+                        }
+                        if let runDist = health.formattedRunDistance {
+                            HealthMetricCard(
+                                icon: "figure.run",
+                                value: runDist,
+                                label: "Running",
+                                color: .green
+                            )
+                        }
+                    } else {
+                        noHealthDataView
+                    }
                 }
+                .scrollTargetLayout()
             }
-
-            if healthManager.authorizationStatus == .unavailable {
-                healthUnavailableView
-            } else if healthManager.authorizationStatus == .denied {
-                healthDeniedView
-            } else {
-                healthDataGrid
-            }
-        }
-        .padding(Theme.Spacing.md)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-    }
-
-    private var healthDataGrid: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible()),
-            GridItem(.flexible())
-        ], spacing: Theme.Spacing.sm) {
-            HealthMetricCard(
-                icon: "bed.double.fill",
-                value: healthManager.formattedTodaySleep,
-                label: "Sleep",
-                color: .indigo
-            )
-
-            HealthMetricCard(
-                icon: "figure.walk",
-                value: healthManager.formattedTodaySteps,
-                label: "Steps",
-                color: .orange
-            )
-
-            HealthMetricCard(
-                icon: "flame.fill",
-                value: healthManager.formattedTodayCalories,
-                label: "Active Cal",
-                color: .pink
-            )
-
-            HealthMetricCard(
-                icon: "figure.run",
-                value: healthManager.formattedTodayExercise,
-                label: "Exercise",
-                color: .green
-            )
+            .scrollTargetBehavior(.viewAligned)
+            .scrollIndicators(.hidden)
         }
     }
 
-    private var healthUnavailableView: some View {
-        HStack {
-            Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(.secondary)
-            Text("Health data not available on this device")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.md)
-    }
-
-    private var healthDeniedView: some View {
-        VStack(spacing: Theme.Spacing.xs) {
-            Text("Health access not granted")
+    private var noHealthDataView: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: "heart.slash")
+                .foregroundStyle(Theme.Colors.textTertiary)
+            Text("No health data available")
                 .font(Theme.Typography.callout)
-                .foregroundStyle(.secondary)
-            Text("Enable in Settings > Privacy > Health")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Theme.Colors.textTertiary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.lg)
     }
 
-    // MARK: - Screen Time Section
+    // MARK: - 6. Check-in CTA
 
-    private var screenTimeSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack {
-                Image(systemName: "hourglass")
-                    .foregroundStyle(.cyan)
-                Text("Screen Time")
-                    .font(Theme.Typography.headline)
-                Spacer()
-            }
-
-            switch screenTimeManager.authorizationStatus {
-            case .notDetermined:
-                screenTimeNotDeterminedView
-            case .denied:
-                screenTimeDeniedView
-            case .authorized:
-                DeviceActivityReport(.totalActivity, filter: screenTimeFilter)
-                    .frame(height: 52)
+    private var checkInCTA: some View {
+        Group {
+            if let checkIn = todayCheckIn {
+                todayScoreSummary(checkIn)
+            } else {
+                logCheckInButton
             }
         }
-        .padding(Theme.Spacing.md)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
     }
 
-    private var screenTimeNotDeterminedView: some View {
-        Button {
-            Task {
-                await screenTimeManager.requestAuthorization()
-            }
-        } label: {
-            HStack {
-                Text("Tap to enable Screen Time access")
-                    .font(Theme.Typography.callout)
-                    .foregroundStyle(.secondary)
+    private func todayScoreSummary(_ checkIn: DailyCheckIn) -> some View {
+        Button(action: onLogCheckIn) {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(Theme.Colors.success)
+
+                Text("Today's Score: \(String(format: "%.1f", checkIn.compositeScore))")
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+
                 Spacer()
+
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.Colors.textTertiary)
             }
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
         }
         .buttonStyle(.plain)
-        .padding(.vertical, Theme.Spacing.sm)
+        .accessibilityLabel("Today's score is \(String(format: "%.1f", checkIn.compositeScore)). Tap to view details.")
     }
 
-    private var screenTimeDeniedView: some View {
-        VStack(spacing: Theme.Spacing.xs) {
-            Text("Screen Time access not granted")
-                .font(Theme.Typography.callout)
-                .foregroundStyle(.secondary)
-            Text("Enable in Settings > Screen Time")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.md)
-    }
-
-    // MARK: - Stats Row
-
-    private var statsRow: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            StatCard(
-                value: "\(retrospectives.count)",
-                label: "Retros",
-                icon: "doc.text.fill",
-                color: Theme.KPTA.`try`
-            )
-
-            StatCard(
-                value: "\(pendingActions.count)",
-                label: "Pending",
-                icon: "checklist",
-                color: Theme.KPTA.action
-            )
-
-            StatCard(
-                value: "\(completedThisWeek)",
-                label: "Done",
-                icon: "checkmark.circle.fill",
-                color: Theme.KPTA.keep
-            )
-        }
-    }
-
-    private var completedThisWeek: Int {
-        let calendar = Calendar.current
-        let weekAgo = calendar.date(byAdding: .weekOfYear, value: -1, to: Date()) ?? Date()
-
-        // This would need a separate query for completed actions
-        // For now, return a placeholder
-        return 0
-    }
-
-    // MARK: - Overdue Section
-
-    private var overdueSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Theme.KPTA.problem)
-                Text("Overdue")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.KPTA.problem)
-                Spacer()
+    private var logCheckInButton: some View {
+        Button(action: onLogCheckIn) {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "pencil.line")
+                Text("Log Today's Score")
             }
-
-            ForEach(overdueActions.prefix(3)) { action in
-                ActionMiniRow(action: action)
+            .primaryButtonStyle()
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(ctaPulse ? 1.02 : 1.0)
+        .onAppear {
+            if shouldShowCTAPulse {
+                withAnimation(Theme.Animation.ctaPulse) {
+                    ctaPulse = true
+                }
             }
         }
-        .padding(Theme.Spacing.md)
-        .background(Theme.KPTA.problemBackground)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-    }
-
-    // MARK: - Upcoming Section
-
-    private var upcomingSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Upcoming Actions")
-                .font(Theme.Typography.headline)
-                .foregroundStyle(.primary)
-
-            ForEach(upcomingActions) { action in
-                ActionMiniRow(action: action)
-            }
-        }
-        .padding(Theme.Spacing.md)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-    }
-
-    // MARK: - Recent Retro Section
-
-    private func recentRetroSection(_ retro: Retrospective) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack {
-                Text("Recent")
-                    .font(Theme.Typography.headline)
-                Spacer()
-                Text(retro.type.displayName)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: Theme.Spacing.md) {
-                KPTAMiniCount(count: retro.keeps.count, category: .keep)
-                KPTAMiniCount(count: retro.problems.count, category: .problem)
-                KPTAMiniCount(count: retro.tries.count, category: .try)
-                Spacer()
-                Text(retro.formattedDateRange)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(Theme.Spacing.md)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-    }
-}
-
-// MARK: - Health Metric Card
-
-private struct HealthMetricCard: View {
-    let icon: String
-    let value: String
-    let label: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(color)
-                .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(value)
-                    .font(Theme.Typography.headline)
-                    .fontWeight(.semibold)
-
-                Text(label)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding(Theme.Spacing.sm)
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.small))
-    }
-}
-
-// MARK: - Stat Card
-
-private struct StatCard: View {
-    let value: String
-    let label: String
-    let icon: String
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: Theme.Spacing.xs) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(color)
-
-            Text(value)
-                .font(Theme.Typography.title2)
-                .fontWeight(.semibold)
-
-            Text(label)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.md)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-    }
-}
-
-// MARK: - Action Mini Row
-
-private struct ActionMiniRow: View {
-    let action: ActionItem
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Circle()
-                .fill(action.isOverdue ? Theme.KPTA.problem : Theme.KPTA.action)
-                .frame(width: 8, height: 8)
-
-            Text(action.text)
-                .font(Theme.Typography.body)
-                .lineLimit(1)
-
-            Spacer()
-
-            if let deadline = action.deadline {
-                Text(deadline, style: .date)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(action.isOverdue ? Theme.KPTA.problem : .secondary)
-            }
-        }
-        .padding(.vertical, Theme.Spacing.xs)
-    }
-}
-
-// MARK: - KPTA Mini Count
-
-private struct KPTAMiniCount: View {
-    let count: Int
-    let category: KPTACategory
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(category.color)
-                .frame(width: 8, height: 8)
-            Text("\(count)")
-                .font(Theme.Typography.callout)
-                .fontWeight(.medium)
-        }
+        .accessibilityLabel("Log today's score")
+        .accessibilityHint("Opens the daily check-in form")
     }
 }
 
 // MARK: - Preview
 
 #Preview {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(
-        for: ActionItem.self, Retrospective.self, KPTAItem.self, HealthSummary.self,
-        configurations: config
-    )
-    HomeView(onNewRetro: {}, onShowSettings: {})
-        .modelContainer(container)
+    HomeView(onShowSettings: {}, onLogCheckIn: {})
+        .modelContainer(MockData.previewContainer)
+        .preferredColorScheme(.dark)
 }

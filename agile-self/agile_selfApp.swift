@@ -11,14 +11,16 @@ import SwiftData
 @main
 struct agile_selfApp: App {
     private let sharedModelContainer: ModelContainer?
-    @State private var containerError: Error?
 
     init() {
         let schema = Schema([
-            Retrospective.self,
-            KPTAItem.self,
-            ActionItem.self,
-            HealthSummary.self,
+            DailyCheckIn.self,
+            HealthSnapshot.self,
+            WeeklyReview.self,
+            MonthlyReport.self,
+            ActionItemV2.self,
+            UserProfile.self,
+            Streak.self,
         ])
 
         let modelConfiguration = ModelConfiguration(
@@ -28,7 +30,10 @@ struct agile_selfApp: App {
         )
 
         do {
-            self.sharedModelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            self.sharedModelContainer = try ModelContainer(
+                for: schema,
+                configurations: [modelConfiguration]
+            )
         } catch {
             self.sharedModelContainer = nil
             print("Could not create ModelContainer: \(error)")
@@ -38,7 +43,7 @@ struct agile_selfApp: App {
     var body: some Scene {
         WindowGroup {
             if let container = sharedModelContainer {
-                MainTabView()
+                RootView()
                     .modelContainer(container)
             } else {
                 DatabaseErrorView()
@@ -51,37 +56,36 @@ struct agile_selfApp: App {
 
 struct DatabaseErrorView: View {
     var body: some View {
-        VStack(spacing: Theme.Spacing.lg) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.orange)
+        ZStack {
+            Theme.Colors.backgroundPrimary.ignoresSafeArea()
 
-            Text("Unable to Load Data")
-                .font(Theme.Typography.title2)
-                .fontWeight(.semibold)
+            VStack(spacing: Theme.Spacing.lg) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 60))
+                    .foregroundStyle(Theme.Colors.warning)
 
-            Text("There was a problem loading your data. Please try restarting the app or contact support if the issue persists.")
-                .font(Theme.Typography.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                Text("Unable to Load Data")
+                    .font(Theme.Typography.title2)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+
+                Text("There was a problem loading your data. Please try restarting the app.")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Theme.Spacing.xl)
+
+                Button {
+                    #if os(iOS)
+                    exit(0)
+                    #endif
+                } label: {
+                    Text("Restart App")
+                        .primaryButtonStyle()
+                }
                 .padding(.horizontal, Theme.Spacing.xl)
-
-            Button {
-                // Attempt to restart or provide recovery option
-                #if os(iOS)
-                exit(0)
-                #endif
-            } label: {
-                Text("Restart App")
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Spacing.md)
-                    .background(Theme.KPTA.action)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
             }
-            .padding(.horizontal, Theme.Spacing.xl)
+            .padding()
         }
-        .padding()
+        .preferredColorScheme(.dark)
     }
 }

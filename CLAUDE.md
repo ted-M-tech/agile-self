@@ -8,9 +8,6 @@ This file provides guidance to Claude Code when working with this repository.
 # Build iOS app
 xcodebuild -scheme agile-self -destination 'platform=iOS Simulator,name=iPhone 16' build
 
-# Build watchOS app
-xcodebuild -scheme "agile-self Watch App" -destination 'platform=watchOS Simulator,name=Apple Watch Series 10 (46mm)' build
-
 # Run unit tests (iOS)
 xcodebuild test -scheme agile-self -destination 'platform=iOS Simulator,name=iPhone 16'
 
@@ -22,158 +19,146 @@ Alternatively, open `agile-self.xcodeproj` in Xcode and use Cmd+B to build, Cmd+
 
 ## Project Overview
 
-**Agile Self** is a native iOS/watchOS application for personal self-retrospection using the KPTA (Keep, Problem, Try, Action) framework, integrated with Apple Health data.
+**Agile Self** is a native iOS application for personal self-retrospection with AI-powered growth insights, integrated with Apple Health and Screen Time data.
 
 - Tagline: "Your AI Growth Partner"
 - Motto: "Turn Reflection Into Action"
-- Platform: iOS 17+ / watchOS 10+
+- Platform: iOS 18.1+
+- Full specification: See SPEC.md
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|------------|
-| Language | Swift 5.9+ |
-| UI Framework | SwiftUI |
-| Data Layer | SwiftData |
-| Cloud Sync | CloudKit (via SwiftData) |
-| Health Data | HealthKit |
+| Language | Swift 6.0+ |
+| UI | SwiftUI (iOS 18.1+) |
+| Data | SwiftData + CloudKit |
+| Health | HealthKit |
 | Screen Time | DeviceActivity / FamilyControls |
-| Minimum iOS | iOS 17.0 |
+| Charts | Swift Charts |
+| AI (on-device) | NaturalLanguage + Foundation Models |
+| AI (cloud) | Gemini 2.0 Flash API |
+| Subscription | StoreKit 2 |
+| Widget | WidgetKit |
+| Min iOS | **18.1** |
 
 ## Project Structure
 
 ```
 agile-self/
-├── agile_selfApp.swift              # App entry point
+├── agile_selfApp.swift              # App entry point (RootView + ModelContainer)
 ├── Models/
-│   ├── Retrospective.swift          # Main retrospective model
-│   ├── KPTAItem.swift               # Keep/Problem/Try items
-│   ├── KPTACategory.swift           # K/P/T enum
-│   ├── ActionItem.swift             # Action items with priority
-│   ├── ActionPriority.swift         # Priority enum
-│   ├── RetrospectiveType.swift      # Daily/Weekly/Monthly
-│   └── HealthSummary.swift          # Health data summary
+│   ├── DailyCheckIn.swift           # 4-axis daily scoring (1-10)
+│   ├── HealthSnapshot.swift         # Daily health metrics from HealthKit
+│   ├── WeeklyReview.swift           # AI conversation review + ConversationMessage
+│   ├── MonthlyReport.swift          # Auto-generated report + Correlation
+│   ├── ActionItemV2.swift           # Action items + ActionSource enum
+│   ├── ActionPriority.swift         # Priority enum (high/medium/low)
+│   ├── UserProfile.swift            # User settings + SubscriptionTier
+│   └── Streak.swift                 # Check-in streak tracking
 ├── Views/
-│   ├── MainTabView.swift            # 3-tab navigation
+│   ├── Root/
+│   │   ├── RootView.swift           # Onboarding gate → MainTabView
+│   │   └── MainTabView.swift        # 3-tab: Home / Insights / Profile
 │   ├── Home/
-│   │   └── HomeView.swift           # Dashboard with health data
-│   ├── Actions/
-│   │   ├── ActionsListView.swift    # Action list with filters
-│   │   ├── ActionRowView.swift
-│   │   ├── ActionDetailView.swift
-│   │   ├── AddActionView.swift
-│   │   └── ActionsSummaryWidget.swift
-│   ├── History/
-│   │   ├── HistoryView.swift        # Past retrospectives
-│   │   └── RetrospectiveDetailView.swift
-│   ├── KPTA/
-│   │   ├── KPTAEntryViewModel.swift
-│   │   └── Wizard/                  # Step-by-step entry
-│   │       ├── KPTAWizardView.swift
-│   │       ├── KPTAWizardStep.swift
-│   │       ├── KPTASetupStepView.swift
-│   │       ├── KPTAInputStepView.swift
-│   │       ├── KPTAReviewStepView.swift
-│   │       ├── KPTAItemInputRow.swift
-│   │       └── KPTAWizardProgressBar.swift
-│   └── Settings/
-│       └── SettingsView.swift
-├── Services/
-│   ├── HealthKit/
-│   │   └── HealthKitManager.swift   # Health data fetching
-│   ├── ScreenTime/
-│   │   ├── ScreenTimeManager.swift  # FamilyControls authorization
-│   │   └── ScreenTimeContext.swift  # DeviceActivityReport context
-│   └── Actions/
-│       └── ActionFilter.swift
+│   │   ├── HomeView.swift           # Dashboard (greeting, trend, dimensions, health)
+│   │   ├── ScoreTrendChart.swift    # 7-day composite score (Swift Charts)
+│   │   ├── DimensionCard.swift      # Circular ring progress card
+│   │   ├── AIInsightCard.swift      # AI-generated insight display
+│   │   └── HealthMetricCard.swift   # Health data compact card
+│   ├── CheckIn/
+│   │   ├── DailyCheckInView.swift   # Full-screen 4-axis scoring entry
+│   │   ├── ScoreDimensionPicker.swift # Horizontal 1-10 picker
+│   │   └── CheckInConfirmationView.swift # Animated confirmation overlay
+│   ├── Insights/
+│   │   ├── InsightsView.swift       # Trends, correlations, patterns, streaks
+│   │   ├── CorrelationCard.swift    # Health-score correlation display
+│   │   └── PatternCard.swift        # AI-discovered pattern card
+│   └── Profile/
+│       ├── ProfileView.swift        # User info, actions, settings
+│       └── ActionRow.swift          # Reusable action item row
 └── Utilities/
-    └── Theme.swift                  # Colors, spacing, typography
+    ├── Theme.swift                  # Design system (colors, typography, spacing)
+    └── MockData.swift               # Preview mock data
 
 ScreenTimeReport/                    # App Extension
-├── ScreenTimeReport.swift           # @main extension entry
-├── TotalActivityReport.swift        # Report scene
-└── TotalActivityView.swift          # SwiftUI view for report
+├── ScreenTimeReport.swift
+├── TotalActivityReport.swift
+└── TotalActivityView.swift
 ```
 
-## Key Concepts
+## Core Framework: Daily / Weekly / Monthly Hybrid
 
-### KPTA Framework
-1. **Keep** - What went well, continue doing
-2. **Problem** - Challenges and obstacles
-3. **Try** - New approaches to experiment with
-4. **Action** - Concrete tasks derived from Tries (auto-created from each Try)
+| Layer | Frequency | Time | Method |
+|-------|-----------|------|--------|
+| Daily | Every day | 15 sec | 4-axis scorecard (Energy/Focus/Stress/Growth, 1-10) |
+| Weekly | Once/week | 3-5 min | AI conversation review (Gemini API) |
+| Monthly | Auto | Auto | AI-generated report with trends & correlations |
+
+### 4 Dimensions
+| Dimension | Color | Score |
+|-----------|-------|-------|
+| Energy | Gold (#FDCB6E) | 1-10 |
+| Focus | Sky Blue (#74B9FF) | 1-10 |
+| Stress | Coral (#FF6B6B) | 1-10 (low=good, inverted for composite) |
+| Growth | Mint (#55EFC4) | 1-10 |
 
 ### Navigation (3 Tabs)
-- **Home** - Dashboard with health data, stats, recent activity
-- **Actions** - Manage action items with filtering
-- **History** - Past retrospectives
+- **Home** - Dashboard with score trends, dimension cards, AI insights, health data
+- **Insights** - Trend charts, correlations, AI patterns, streak stats
+- **Profile** - User info, action items, settings
 
-Settings opens as a sheet from the Home screen navigation bar.
+## Design System (Theme.swift)
 
-### Retrospective Types
-- Daily
-- Weekly
-- Monthly
+### Colors
+- Background: Primary (#0A0A0F), Secondary (#13131A), Tertiary (#1C1C26)
+- Accent gradient: #6C5CE7 → #A29BFE (purple)
+- Text: Primary (#F0F0F5), Secondary (#8888A0), Tertiary (#55556A)
+- Semantic: Success (#00B894), Warning (#E17055), Error (#FF6B6B)
 
-### Color Scheme (Theme.KPTA)
-| Element | Color |
-|---------|-------|
-| Keep | Green |
-| Problem | Red |
-| Try | Purple |
-| Action | Blue |
+### Typography
+- Display/Titles: SF Pro Rounded (bold/semibold)
+- Body/UI: SF Pro Text (regular)
+- Scores: Rounded monospaced variants
+
+### Key View Modifiers
+- `.cardStyle()` - Secondary background card
+- `.elevatedCardStyle()` - Tertiary background card
+- `.primaryButtonStyle()` - Accent gradient CTA
+- `.secondaryButtonStyle()` - Outline button
+- `.pillStyle(color:)` - Small tag/badge
+- `.colorBorderCard(_:)` - Card with colored left border
+- `.gradientText()` - Accent gradient text overlay
 
 ## Development Guidelines
 
 ### SwiftUI
 - Use NavigationStack, not NavigationView
-- Use @Query for SwiftData fetching
-- Follow Apple Human Interface Guidelines
-- Support Dynamic Type and dark mode
-- Use SF Symbols for icons
+- Dark mode only (preferredColorScheme(.dark))
+- Use Theme.* constants for all colors, typography, spacing
+- Support Dynamic Type
+- Use SF Symbols for all icons
+- All views must have #Preview blocks with MockData
 
 ### SwiftData
 - Use @Model for persistent types
-- Use @Relationship with deleteRule: .cascade
-- Insert parent before appending children
+- Do NOT nest types inside @Model classes
+- Use Data? + computed properties for JSON-encoded arrays
+- Simple [String] arrays work directly
 
-### HealthKit
-- Check HKHealthStore.isHealthDataAvailable() first
-- Read-only access (never write)
-- Handle authorization denial gracefully
-- Use @MainActor for HealthKitManager
-
-### Screen Time (DeviceActivity)
-- Requires FamilyControls entitlement (privileged - needs Apple approval for App Store)
-- Uses DeviceActivityReportExtension to display usage data
-- Data stays sandboxed in extension view (cannot extract to main app)
-- Request authorization via AuthorizationCenter.shared.requestAuthorization(for: .individual)
-- DeviceActivityReport SwiftUI view renders the extension's content
+### Architecture
+- Unidirectional: Views → ViewModels → Services → SwiftData
+- AppContainer for dependency injection (replacing singletons)
+- DimensionType enum defined in Theme.swift (shared across models/views)
 
 ### Concurrency
 - Project uses SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
 - Mark nonisolated properties that don't need MainActor
-- Use @State for @Observable objects in views
 
-## Code Patterns
-
-```swift
-// SwiftData query in view
-@Query(sort: \Retrospective.createdAt, order: .reverse)
-private var retrospectives: [Retrospective]
-
-// HealthKit with @Observable
-@MainActor
-@Observable
-final class HealthKitManager {
-    static let shared = HealthKitManager()
-    private nonisolated let healthStore: HKHealthStore?
-    // ...
-}
-
-// Using in SwiftUI
-@State private var healthManager = HealthKitManager.shared
-```
+### Privacy
+- Local-first data storage
+- Cloud AI data is anonymized before sending
+- User consent required for cloud AI (allowCloudAI flag)
 
 ## Xcode Capabilities Required
 
@@ -181,16 +166,14 @@ final class HealthKitManager {
 - HealthKit
 - iCloud (CloudKit)
 - Family Controls
+- Push Notifications
+- App Groups
 
 ### ScreenTimeReport Extension
 - Family Controls
-
-### Info.plist Keys (via Build Settings)
-- NSHealthShareUsageDescription
-- NSHealthUpdateUsageDescription
 
 ## Testing
 
 - Unit tests in `agile-selfTests/`
 - UI tests in `agile-selfUITests/`
-- Use in-memory ModelConfiguration for previews
+- Use MockData.previewContainer for in-memory SwiftData previews
