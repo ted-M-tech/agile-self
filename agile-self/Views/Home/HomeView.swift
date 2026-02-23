@@ -10,15 +10,15 @@ import SwiftData
 import Charts
 
 struct HomeView: View {
+    @Environment(AppContainer.self) private var appContainer
+    @Environment(\.modelContext) private var modelContext
+
     let onShowSettings: () -> Void
     let onLogCheckIn: () -> Void
 
-    // MARK: - Mock Data (prototype: swap to @Query for production)
+    // MARK: - ViewModel
 
-    @State private var weeklyCheckIns = MockData.weeklyCheckIns
-    @State private var todayCheckIn: DailyCheckIn? = MockData.todayCheckIn
-    @State private var todayHealth: HealthSnapshot? = MockData.todayHealth
-    @State private var streak = MockData.streak
+    @State private var viewModel = HomeViewModel()
 
     // MARK: - Animation State
 
@@ -37,10 +37,6 @@ struct HomeView: View {
         }
     }
 
-    private var userName: String {
-        MockData.userProfile.displayName ?? "there"
-    }
-
     private var formattedDate: String {
         Date().formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
     }
@@ -50,25 +46,35 @@ struct HomeView: View {
     }
 
     private var shouldShowCTAPulse: Bool {
-        isEvening && todayCheckIn == nil
+        isEvening && viewModel.todayCheckIn == nil
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
-                    headerSection
-                    scoreTrendSection
-                    dimensionGridSection
-                    aiInsightSection
-                    healthSection
-                    checkInCTA
+                    if let error = viewModel.errorMessage {
+                        errorStateView(message: error)
+                    } else if viewModel.isLoading {
+                        loadingStateView
+                    } else {
+                        headerSection
+                        scoreTrendSection
+                        dimensionGridSection
+                        aiInsightSection
+                        healthSection
+                        checkInCTA
+                    }
                     Spacer(minLength: Theme.Spacing.xxl)
                 }
                 .padding(.horizontal, Theme.Spacing.md)
             }
             .background(Theme.Colors.backgroundPrimary)
             .scrollIndicators(.hidden)
+            .refreshable {
+                viewModel.loadData(context: modelContext)
+                await viewModel.loadHealthData(context: modelContext)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: onShowSettings) {
@@ -78,14 +84,69 @@ struct HomeView: View {
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
+            .task {
+                viewModel.configure(
+                    healthKitService: appContainer.healthKitService,
+                    aiService: appContainer.aiService,
+                    streakService: appContainer.streakService,
+                    screenTimeService: appContainer.screenTimeService
+                )
+                viewModel.loadData(context: modelContext)
+                await viewModel.loadHealthData(context: modelContext)
+            }
         }
+    }
+
+    // MARK: - Loading State
+
+    private var loadingStateView: some View {
+        VStack(spacing: Theme.Spacing.lg) {
+            Spacer(minLength: 100)
+            ProgressView()
+                .tint(Theme.Colors.accentStart)
+                .scaleEffect(1.2)
+            Text("Loading...")
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textTertiary)
+            Spacer(minLength: 100)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Error State
+
+    private func errorStateView(message: String) -> some View {
+        VStack(spacing: Theme.Spacing.md) {
+            Spacer(minLength: 80)
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(Theme.Colors.warning)
+
+            Text("Something went wrong")
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.textPrimary)
+
+            Text(message)
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                viewModel.loadData(context: modelContext)
+            } label: {
+                Text("Try Again")
+                    .secondaryButtonStyle()
+            }
+            Spacer(minLength: 80)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - 1. Header
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("\(greeting), \(userName)")
+            Text("\(greeting), \(viewModel.userName)")
                 .font(Theme.Typography.title2)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -100,7 +161,7 @@ struct HomeView: View {
     // MARK: - 2. Score Trend
 
     private var scoreTrendSection: some View {
-        ScoreTrendChart(checkIns: weeklyCheckIns)
+        ScoreTrendChart(checkIns: viewModel.weeklyCheckIns)
     }
 
     // MARK: - 3. Dimension Grid
@@ -113,7 +174,7 @@ struct HomeView: View {
             ForEach(Array(DimensionType.allCases.enumerated()), id: \.element) { index, dimension in
                 DimensionCard(
                     dimension: dimension,
-                    score: todayCheckIn?.score(for: dimension) ?? 0
+                    score: viewModel.todayCheckIn?.score(for: dimension) ?? 0
                 )
                 .opacity(dimensionsAppeared ? 1 : 0)
                 .offset(y: dimensionsAppeared ? 0 : 20)
@@ -131,7 +192,7 @@ struct HomeView: View {
     // MARK: - 4. AI Insight
 
     private var aiInsightSection: some View {
-        AIInsightCard(insight: todayCheckIn?.dailyInsight)
+        AIInsightCard(insight: viewModel.todayCheckIn?.dailyInsight)
     }
 
     // MARK: - 5. Health Metrics
@@ -147,13 +208,22 @@ struct HomeView: View {
 
             ScrollView(.horizontal) {
                 HStack(spacing: Theme.Spacing.sm) {
-                    if let health = todayHealth {
+                    if let health = viewModel.todayHealth {
                         if let sleep = health.formattedSleep {
                             HealthMetricCard(
                                 icon: "bed.double.fill",
                                 value: sleep,
                                 label: "Sleep",
-                                color: .indigo
+                                color: Theme.Colors.sleep
+                            )
+                        }
+                        if let score = health.sleepScore,
+                           let label = health.sleepQualityLabel {
+                            HealthMetricCard(
+                                icon: "moon.stars.fill",
+                                value: "\(score)",
+                                label: label,
+                                color: Theme.Colors.sleep
                             )
                         }
                         if let steps = health.formattedSteps {
@@ -161,7 +231,7 @@ struct HomeView: View {
                                 icon: "figure.walk",
                                 value: steps,
                                 label: "Steps",
-                                color: .orange
+                                color: Theme.Colors.steps
                             )
                         }
                         if let heartRate = health.formattedHeartRate {
@@ -169,7 +239,7 @@ struct HomeView: View {
                                 icon: "heart.fill",
                                 value: heartRate,
                                 label: "Heart Rate",
-                                color: .red
+                                color: Theme.Colors.heartRate
                             )
                         }
                         if let screenTime = health.formattedScreenTime {
@@ -177,7 +247,7 @@ struct HomeView: View {
                                 icon: "iphone",
                                 value: screenTime,
                                 label: "Screen Time",
-                                color: .cyan
+                                color: Theme.Colors.screenTime
                             )
                         }
                         if let runDist = health.formattedRunDistance {
@@ -185,7 +255,7 @@ struct HomeView: View {
                                 icon: "figure.run",
                                 value: runDist,
                                 label: "Running",
-                                color: .green
+                                color: Theme.Colors.running
                             )
                         }
                     } else {
@@ -215,7 +285,7 @@ struct HomeView: View {
 
     private var checkInCTA: some View {
         Group {
-            if let checkIn = todayCheckIn {
+            if let checkIn = viewModel.todayCheckIn {
                 todayScoreSummary(checkIn)
             } else {
                 logCheckInButton
@@ -275,5 +345,6 @@ struct HomeView: View {
 #Preview {
     HomeView(onShowSettings: {}, onLogCheckIn: {})
         .modelContainer(MockData.previewContainer)
+        .environment(AppContainer(modelContainer: MockData.previewContainer))
         .preferredColorScheme(.dark)
 }

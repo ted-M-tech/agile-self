@@ -6,30 +6,35 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct ProfileView: View {
-    private let profile = MockData.userProfile
-    private let streak = MockData.streak
-    @State private var actions = MockData.actionItems
+    @Environment(AppContainer.self) private var appContainer
+    @Environment(\.modelContext) private var modelContext
+
+    // MARK: - ViewModel
+
+    @State private var viewModel = ProfileViewModel()
+
+    // MARK: - UI State
+
     @State private var showCompletedActions = false
-
-    private var activeActions: [ActionItemV2] {
-        actions.filter { !$0.isCompleted }
-    }
-
-    private var completedActions: [ActionItemV2] {
-        actions.filter { $0.isCompleted }
-    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
-                    profileHeader
-                    streakSection
-                    activeActionsSection
-                    completedActionsSection
-                    settingsSection
+                    if let error = viewModel.errorMessage {
+                        profileErrorView(message: error)
+                    } else if viewModel.isLoading {
+                        profileLoadingView
+                    } else {
+                        profileHeader
+                        streakSection
+                        activeActionsSection
+                        completedActionsSection
+                        settingsSection
+                    }
                     Spacer(minLength: Theme.Spacing.xxl)
                 }
                 .padding(.horizontal, Theme.Spacing.md)
@@ -37,7 +42,59 @@ struct ProfileView: View {
             .background(Theme.Colors.backgroundPrimary.ignoresSafeArea())
             .navigationTitle("Profile")
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .task {
+                viewModel.configure(
+                    streakService: appContainer.streakService,
+                    subscriptionService: appContainer.subscriptionService
+                )
+                viewModel.loadData(context: modelContext)
+            }
         }
+    }
+
+    // MARK: - Loading State
+
+    private var profileLoadingView: some View {
+        VStack(spacing: Theme.Spacing.lg) {
+            Spacer(minLength: 100)
+            ProgressView()
+                .tint(Theme.Colors.accentStart)
+                .scaleEffect(1.2)
+            Text("Loading profile...")
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textTertiary)
+            Spacer(minLength: 100)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Error State
+
+    private func profileErrorView(message: String) -> some View {
+        VStack(spacing: Theme.Spacing.md) {
+            Spacer(minLength: 80)
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(Theme.Colors.warning)
+
+            Text("Something went wrong")
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.textPrimary)
+
+            Text(message)
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                viewModel.loadData(context: modelContext)
+            } label: {
+                Text("Try Again")
+                    .secondaryButtonStyle()
+            }
+            Spacer(minLength: 80)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Profile Header
@@ -57,14 +114,15 @@ struct ProfileView: View {
                 .accessibilityHidden(true)
 
             // Display name
-            Text(profile.displayName ?? "User")
+            Text(viewModel.profile?.displayName ?? "User")
                 .font(Theme.Typography.title1)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
             // Subscription badge
-            Text(profile.subscriptionTier == .premium ? "Premium" : "Free")
+            let tier = viewModel.profile?.subscriptionTier ?? .free
+            Text(tier == .premium ? "Premium" : "Free")
                 .pillStyle(
-                    color: profile.subscriptionTier == .premium
+                    color: tier == .premium
                         ? Theme.Colors.accentStart
                         : Theme.Colors.textSecondary
                 )
@@ -72,7 +130,7 @@ struct ProfileView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.lg)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(profile.displayName ?? "User"), \(profile.subscriptionTier.rawValue) plan")
+        .accessibilityLabel("\(viewModel.profile?.displayName ?? "User"), \(viewModel.profile?.subscriptionTier.rawValue ?? "free") plan")
     }
 
     // MARK: - Streak Section
@@ -88,7 +146,7 @@ struct ProfileView: View {
                         .font(.title2)
                         .foregroundStyle(Theme.Colors.warning)
 
-                    Text("\(streak.currentStreak)")
+                    Text("\(viewModel.streak?.currentStreak ?? 0)")
                         .font(Theme.Typography.scoreLarge)
                         .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -105,19 +163,19 @@ struct ProfileView: View {
                         .stroke(Theme.Colors.warning.opacity(0.3), lineWidth: 1)
                 )
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Current streak: \(streak.currentStreak) days")
+                .accessibilityLabel("Current streak: \(viewModel.streak?.currentStreak ?? 0) days")
 
                 // Secondary stats
                 VStack(spacing: Theme.Spacing.sm) {
                     streakMiniStat(
-                        value: "\(streak.longestStreak)",
+                        value: "\(viewModel.streak?.longestStreak ?? 0)",
                         label: "Longest",
                         icon: "trophy.fill",
                         color: Theme.Dimension.energy
                     )
 
                     streakMiniStat(
-                        value: "\(streak.totalCheckIns)",
+                        value: "\(viewModel.streak?.totalCheckIns ?? 0)",
                         label: "Total Check-ins",
                         icon: "checkmark.circle.fill",
                         color: Theme.Colors.success
@@ -162,20 +220,20 @@ struct ProfileView: View {
 
     private var activeActionsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            sectionHeader(title: "ACTIVE ACTIONS", count: activeActions.count)
+            sectionHeader(title: "ACTIVE ACTIONS", count: viewModel.activeActions.count)
 
-            if activeActions.isEmpty {
+            if viewModel.activeActions.isEmpty {
                 emptyActionsView
             } else {
                 VStack(spacing: 0) {
-                    ForEach(activeActions, id: \.id) { action in
+                    ForEach(viewModel.activeActions, id: \.id) { action in
                         ActionRow(action: action) {
                             withAnimation(Theme.Animation.smooth) {
-                                action.toggleCompletion()
+                                viewModel.toggleAction(action)
                             }
                         }
 
-                        if action.id != activeActions.last?.id {
+                        if action.id != viewModel.activeActions.last?.id {
                             Divider()
                                 .overlay(Theme.Colors.divider)
                         }
@@ -219,7 +277,7 @@ struct ProfileView: View {
                 }
             } label: {
                 HStack {
-                    sectionHeader(title: "COMPLETED", count: completedActions.count)
+                    sectionHeader(title: "COMPLETED", count: viewModel.completedActions.count)
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
@@ -228,20 +286,20 @@ struct ProfileView: View {
                 }
             }
             .buttonStyle(.plain)
-            .disabled(completedActions.isEmpty)
-            .accessibilityLabel("Completed actions, \(completedActions.count) items")
+            .disabled(viewModel.completedActions.isEmpty)
+            .accessibilityLabel("Completed actions, \(viewModel.completedActions.count) items")
             .accessibilityHint(showCompletedActions ? "Double tap to collapse" : "Double tap to expand")
 
-            if showCompletedActions && !completedActions.isEmpty {
+            if showCompletedActions && !viewModel.completedActions.isEmpty {
                 VStack(spacing: 0) {
-                    ForEach(completedActions, id: \.id) { action in
+                    ForEach(viewModel.completedActions, id: \.id) { action in
                         ActionRow(action: action) {
                             withAnimation(Theme.Animation.smooth) {
-                                action.toggleCompletion()
+                                viewModel.toggleAction(action)
                             }
                         }
 
-                        if action.id != completedActions.last?.id {
+                        if action.id != viewModel.completedActions.last?.id {
                             Divider()
                                 .overlay(Theme.Colors.divider)
                         }
@@ -259,7 +317,7 @@ struct ProfileView: View {
 
     private var settingsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            sectionHeader(title: "SETTINGS")
+            sectionHeader(title: "PREFERENCES")
 
             VStack(spacing: 0) {
                 settingsRow(icon: "heart.fill", label: "Health Data", iconColor: .red)
@@ -339,5 +397,7 @@ struct ProfileView: View {
 
 #Preview {
     ProfileView()
+        .modelContainer(MockData.previewContainer)
+        .environment(AppContainer(modelContainer: MockData.previewContainer))
         .preferredColorScheme(.dark)
 }

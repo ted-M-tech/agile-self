@@ -27,6 +27,14 @@ struct TotalActivityReport: DeviceActivityReportScene {
             }
         }
 
+        // Write to shared App Group UserDefaults so the main app can read screen time
+        if let sharedDefaults = UserDefaults(suiteName: "group.tetsuya.agile-self") {
+            let totalMinutes = Int(totalDuration / 60.0)
+            sharedDefaults.set(totalMinutes, forKey: "screenTimeMinutes")
+            let dateString = ISO8601DateFormatter().string(from: Date())
+            sharedDefaults.set(dateString, forKey: "screenTimeDate")
+        }
+
         return ActivityReport(totalDuration: totalDuration)
     }
 }

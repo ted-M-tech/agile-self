@@ -13,6 +13,7 @@ import SwiftData
 struct DailyCheckInView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppContainer.self) private var appContainer
 
     @Query(sort: \DailyCheckIn.date, order: .reverse)
     private var recentCheckIns: [DailyCheckIn]
@@ -36,6 +37,7 @@ struct DailyCheckInView: View {
 
     // Saving state
     @State private var isSaving = false
+    @State private var generatedInsight: String?
 
     private let noteMaxLength = 280
 
@@ -67,6 +69,7 @@ struct DailyCheckInView: View {
                     growthScore: growthScore,
                     elapsedSeconds: elapsedSeconds,
                     previousComposite: previousComposite,
+                    insight: generatedInsight,
                     onDismiss: {
                         showConfirmation = false
                         dismiss()
@@ -286,6 +289,17 @@ struct DailyCheckInView: View {
 
         modelContext.insert(checkIn)
 
+        // Record check-in for streak tracking
+        appContainer.streakService.recordCheckIn(context: modelContext)
+
+        // Generate AI insight asynchronously
+        Task {
+            if let insight = try? await appContainer.aiService.generateDailyInsight(checkIn: checkIn) {
+                checkIn.dailyInsight = insight
+                generatedInsight = insight
+            }
+        }
+
         withAnimation(Theme.Animation.smooth) {
             isSaving = false
             showConfirmation = true
@@ -298,6 +312,7 @@ struct DailyCheckInView: View {
 #Preview("Check-in Entry") {
     DailyCheckInView()
         .modelContainer(MockData.previewContainer)
+        .environment(AppContainer(modelContainer: MockData.previewContainer))
         .preferredColorScheme(.dark)
 }
 
@@ -310,6 +325,7 @@ struct DailyCheckInView: View {
     .sheet(isPresented: .constant(true)) {
         DailyCheckInView()
             .modelContainer(MockData.previewContainer)
+            .environment(AppContainer(modelContainer: MockData.previewContainer))
             .preferredColorScheme(.dark)
     }
 }

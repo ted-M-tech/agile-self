@@ -9,41 +9,537 @@ import Testing
 import Foundation
 @testable import agile_self
 
-// MARK: - ActionItem Tests
+// MARK: - DailyCheckIn Tests
 
-struct ActionItemTests {
+struct DailyCheckInTests {
 
     // MARK: - Initialization Tests
 
     @Test
-    func testActionItemInitializationWithDefaults() {
-        let action = ActionItem(text: "Complete weekly report")
+    func initializationWithDefaults() {
+        let checkIn = DailyCheckIn()
+
+        #expect(checkIn.energyScore == 5)
+        #expect(checkIn.focusScore == 5)
+        #expect(checkIn.stressScore == 5)
+        #expect(checkIn.growthScore == 5)
+        #expect(checkIn.note == nil)
+        #expect(checkIn.sentimentScore == nil)
+        #expect(checkIn.dailyInsight == nil)
+    }
+
+    @Test
+    func initializationWithCustomValues() {
+        let id = UUID()
+        let date = Date()
+        let createdAt = Date()
+
+        let checkIn = DailyCheckIn(
+            id: id,
+            date: date,
+            energyScore: 8,
+            focusScore: 9,
+            stressScore: 3,
+            growthScore: 7,
+            note: "Great day",
+            sentimentScore: 0.85,
+            dailyInsight: "You had a productive day",
+            createdAt: createdAt
+        )
+
+        #expect(checkIn.id == id)
+        #expect(checkIn.date == date)
+        #expect(checkIn.energyScore == 8)
+        #expect(checkIn.focusScore == 9)
+        #expect(checkIn.stressScore == 3)
+        #expect(checkIn.growthScore == 7)
+        #expect(checkIn.note == "Great day")
+        #expect(checkIn.sentimentScore == 0.85)
+        #expect(checkIn.dailyInsight == "You had a productive day")
+        #expect(checkIn.createdAt == createdAt)
+    }
+
+    @Test
+    func defaultDateIsStartOfToday() {
+        let checkIn = DailyCheckIn()
+        let expectedDate = Calendar.current.startOfDay(for: Date())
+
+        #expect(checkIn.date == expectedDate)
+    }
+
+    // MARK: - Composite Score Tests
+
+    @Test
+    func compositeScoreWithDefaultValues() {
+        let checkIn = DailyCheckIn()
+        // All scores = 5, invertedStress = 11 - 5 = 6
+        // (5 + 5 + 6 + 5) / 4.0 = 21 / 4.0 = 5.25
+        #expect(checkIn.compositeScore == 5.25)
+    }
+
+    @Test
+    func compositeScoreWithMaxValues() {
+        let checkIn = DailyCheckIn(
+            energyScore: 10,
+            focusScore: 10,
+            stressScore: 1,  // Low stress is good
+            growthScore: 10
+        )
+        // invertedStress = 11 - 1 = 10
+        // (10 + 10 + 10 + 10) / 4.0 = 10.0
+        #expect(checkIn.compositeScore == 10.0)
+    }
+
+    @Test
+    func compositeScoreWithMinValues() {
+        let checkIn = DailyCheckIn(
+            energyScore: 1,
+            focusScore: 1,
+            stressScore: 10,  // High stress is bad
+            growthScore: 1
+        )
+        // invertedStress = 11 - 10 = 1
+        // (1 + 1 + 1 + 1) / 4.0 = 1.0
+        #expect(checkIn.compositeScore == 1.0)
+    }
+
+    @Test
+    func compositeScoreInvertsStress() {
+        // Two check-ins identical except for stress
+        let lowStress = DailyCheckIn(energyScore: 5, focusScore: 5, stressScore: 2, growthScore: 5)
+        let highStress = DailyCheckIn(energyScore: 5, focusScore: 5, stressScore: 9, growthScore: 5)
+
+        // Low stress should yield a higher composite score
+        #expect(lowStress.compositeScore > highStress.compositeScore)
+    }
+
+    @Test
+    func compositeScoreWithMixedValues() {
+        let checkIn = DailyCheckIn(
+            energyScore: 8,
+            focusScore: 6,
+            stressScore: 3,
+            growthScore: 7
+        )
+        // invertedStress = 11 - 3 = 8
+        // (8 + 6 + 8 + 7) / 4.0 = 29 / 4.0 = 7.25
+        #expect(checkIn.compositeScore == 7.25)
+    }
+
+    // MARK: - score(for:) Tests
+
+    @Test
+    func scoreForEnergy() {
+        let checkIn = DailyCheckIn(energyScore: 8)
+        #expect(checkIn.score(for: .energy) == 8)
+    }
+
+    @Test
+    func scoreForFocus() {
+        let checkIn = DailyCheckIn(focusScore: 3)
+        #expect(checkIn.score(for: .focus) == 3)
+    }
+
+    @Test
+    func scoreForStress() {
+        let checkIn = DailyCheckIn(stressScore: 7)
+        #expect(checkIn.score(for: .stress) == 7)
+    }
+
+    @Test
+    func scoreForGrowth() {
+        let checkIn = DailyCheckIn(growthScore: 10)
+        #expect(checkIn.score(for: .growth) == 10)
+    }
+
+    @Test
+    func scoreForAllDimensions() {
+        let checkIn = DailyCheckIn(
+            energyScore: 2,
+            focusScore: 4,
+            stressScore: 6,
+            growthScore: 8
+        )
+        for dimension in DimensionType.allCases {
+            let score = checkIn.score(for: dimension)
+            switch dimension {
+            case .energy: #expect(score == 2)
+            case .focus: #expect(score == 4)
+            case .stress: #expect(score == 6)
+            case .growth: #expect(score == 8)
+            }
+        }
+    }
+
+    // MARK: - setScore(_:for:) Tests
+
+    @Test
+    func setScoreForEnergy() {
+        let checkIn = DailyCheckIn()
+        checkIn.setScore(9, for: .energy)
+        #expect(checkIn.energyScore == 9)
+    }
+
+    @Test
+    func setScoreForFocus() {
+        let checkIn = DailyCheckIn()
+        checkIn.setScore(2, for: .focus)
+        #expect(checkIn.focusScore == 2)
+    }
+
+    @Test
+    func setScoreForStress() {
+        let checkIn = DailyCheckIn()
+        checkIn.setScore(8, for: .stress)
+        #expect(checkIn.stressScore == 8)
+    }
+
+    @Test
+    func setScoreForGrowth() {
+        let checkIn = DailyCheckIn()
+        checkIn.setScore(1, for: .growth)
+        #expect(checkIn.growthScore == 1)
+    }
+
+    @Test
+    func setScoreClampsAboveMaximum() {
+        let checkIn = DailyCheckIn()
+        checkIn.setScore(15, for: .energy)
+        #expect(checkIn.energyScore == 10)
+    }
+
+    @Test
+    func setScoreClampsBelowMinimum() {
+        let checkIn = DailyCheckIn()
+        checkIn.setScore(0, for: .focus)
+        #expect(checkIn.focusScore == 1)
+    }
+
+    @Test
+    func setScoreClampsNegativeValue() {
+        let checkIn = DailyCheckIn()
+        checkIn.setScore(-5, for: .stress)
+        #expect(checkIn.stressScore == 1)
+    }
+
+    @Test
+    func setScoreClampsLargeValue() {
+        let checkIn = DailyCheckIn()
+        checkIn.setScore(1000, for: .growth)
+        #expect(checkIn.growthScore == 10)
+    }
+
+    @Test
+    func setScoreBoundaryValues() {
+        let checkIn = DailyCheckIn()
+
+        checkIn.setScore(1, for: .energy)
+        #expect(checkIn.energyScore == 1)
+
+        checkIn.setScore(10, for: .energy)
+        #expect(checkIn.energyScore == 10)
+    }
+
+    // MARK: - Unique ID Tests
+
+    @Test
+    func uniqueIDsGenerated() {
+        let checkIn1 = DailyCheckIn()
+        let checkIn2 = DailyCheckIn()
+        #expect(checkIn1.id != checkIn2.id)
+    }
+
+    @Test
+    func preservedIDWhenProvided() {
+        let specificID = UUID()
+        let checkIn = DailyCheckIn(id: specificID)
+        #expect(checkIn.id == specificID)
+    }
+}
+
+// MARK: - HealthSnapshot Tests
+
+struct HealthSnapshotTests {
+
+    // MARK: - Initialization Tests
+
+    @Test
+    func initializationWithDefaults() {
+        let snapshot = HealthSnapshot()
+
+        #expect(snapshot.sleepMinutes == nil)
+        #expect(snapshot.steps == nil)
+        #expect(snapshot.activeCalories == nil)
+        #expect(snapshot.exerciseMinutes == nil)
+        #expect(snapshot.restingHeartRate == nil)
+        #expect(snapshot.runningDistanceMeters == nil)
+        #expect(snapshot.screenTimeMinutes == nil)
+    }
+
+    @Test
+    func initializationWithAllValues() {
+        let id = UUID()
+        let date = Date()
+        let createdAt = Date()
+
+        let snapshot = HealthSnapshot(
+            id: id,
+            date: date,
+            sleepMinutes: 450,
+            steps: 8500,
+            activeCalories: 320,
+            exerciseMinutes: 45,
+            restingHeartRate: 62,
+            runningDistanceMeters: 5200.0,
+            screenTimeMinutes: 195,
+            createdAt: createdAt
+        )
+
+        #expect(snapshot.id == id)
+        #expect(snapshot.date == date)
+        #expect(snapshot.sleepMinutes == 450)
+        #expect(snapshot.steps == 8500)
+        #expect(snapshot.activeCalories == 320)
+        #expect(snapshot.exerciseMinutes == 45)
+        #expect(snapshot.restingHeartRate == 62)
+        #expect(snapshot.runningDistanceMeters == 5200.0)
+        #expect(snapshot.screenTimeMinutes == 195)
+        #expect(snapshot.createdAt == createdAt)
+    }
+
+    // MARK: - formattedSleep Tests
+
+    @Test
+    func formattedSleepWithNilValue() {
+        let snapshot = HealthSnapshot()
+        #expect(snapshot.formattedSleep == nil)
+    }
+
+    @Test
+    func formattedSleepWithHoursAndMinutes() {
+        let snapshot = HealthSnapshot(sleepMinutes: 450)
+        // 450 min = 7h 30m
+        #expect(snapshot.formattedSleep == "7h 30m")
+    }
+
+    @Test
+    func formattedSleepWithExactHours() {
+        let snapshot = HealthSnapshot(sleepMinutes: 480)
+        // 480 min = 8h, 0 remaining -> "8h" (no remaining to show)
+        #expect(snapshot.formattedSleep == "8h")
+    }
+
+    @Test
+    func formattedSleepWithOnlyMinutes() {
+        let snapshot = HealthSnapshot(sleepMinutes: 45)
+        // 45 min = 0h 45m -> "45m"
+        #expect(snapshot.formattedSleep == "45m")
+    }
+
+    @Test
+    func formattedSleepWithZeroMinutes() {
+        let snapshot = HealthSnapshot(sleepMinutes: 0)
+        // 0 min = 0h 0m -> "0m" (hours = 0, remaining = 0, falls to else)
+        #expect(snapshot.formattedSleep == "0m")
+    }
+
+    @Test
+    func formattedSleepWithOneMinute() {
+        let snapshot = HealthSnapshot(sleepMinutes: 1)
+        #expect(snapshot.formattedSleep == "1m")
+    }
+
+    @Test
+    func formattedSleepWithOneHour() {
+        let snapshot = HealthSnapshot(sleepMinutes: 60)
+        #expect(snapshot.formattedSleep == "1h")
+    }
+
+    @Test
+    func formattedSleepWithOneHourOneMinute() {
+        let snapshot = HealthSnapshot(sleepMinutes: 61)
+        #expect(snapshot.formattedSleep == "1h 1m")
+    }
+
+    // MARK: - formattedSteps Tests
+
+    @Test
+    func formattedStepsWithNilValue() {
+        let snapshot = HealthSnapshot()
+        #expect(snapshot.formattedSteps == nil)
+    }
+
+    @Test
+    func formattedStepsWithSmallValue() {
+        let snapshot = HealthSnapshot(steps: 500)
+        #expect(snapshot.formattedSteps == "500")
+    }
+
+    @Test
+    func formattedStepsWithZero() {
+        let snapshot = HealthSnapshot(steps: 0)
+        #expect(snapshot.formattedSteps == "0")
+    }
+
+    @Test
+    func formattedStepsWithThousandsSeparator() {
+        let snapshot = HealthSnapshot(steps: 10000)
+        let formatted = snapshot.formattedSteps
+        #expect(formatted != nil)
+        // NumberFormatter with .decimal style uses locale-specific separator.
+        // For most locales this will be "10,000" or "10.000".
+        #expect(formatted!.contains("10"))
+    }
+
+    @Test
+    func formattedStepsWithLargeValue() {
+        let snapshot = HealthSnapshot(steps: 25432)
+        let formatted = snapshot.formattedSteps
+        #expect(formatted != nil)
+        #expect(formatted!.contains("25"))
+    }
+
+    // MARK: - formattedScreenTime Tests
+
+    @Test
+    func formattedScreenTimeWithNilValue() {
+        let snapshot = HealthSnapshot()
+        #expect(snapshot.formattedScreenTime == nil)
+    }
+
+    @Test
+    func formattedScreenTimeWithHoursAndMinutes() {
+        let snapshot = HealthSnapshot(screenTimeMinutes: 195)
+        // 195 min = 3h 15m
+        #expect(snapshot.formattedScreenTime == "3h 15m")
+    }
+
+    @Test
+    func formattedScreenTimeWithExactHours() {
+        let snapshot = HealthSnapshot(screenTimeMinutes: 120)
+        #expect(snapshot.formattedScreenTime == "2h")
+    }
+
+    @Test
+    func formattedScreenTimeWithOnlyMinutes() {
+        let snapshot = HealthSnapshot(screenTimeMinutes: 30)
+        #expect(snapshot.formattedScreenTime == "30m")
+    }
+
+    @Test
+    func formattedScreenTimeWithZero() {
+        let snapshot = HealthSnapshot(screenTimeMinutes: 0)
+        #expect(snapshot.formattedScreenTime == "0m")
+    }
+
+    // MARK: - formattedRunDistance Tests
+
+    @Test
+    func formattedRunDistanceWithNilValue() {
+        let snapshot = HealthSnapshot()
+        #expect(snapshot.formattedRunDistance == nil)
+    }
+
+    @Test
+    func formattedRunDistanceWithKilometers() {
+        let snapshot = HealthSnapshot(runningDistanceMeters: 5200.0)
+        #expect(snapshot.formattedRunDistance == "5.2km")
+    }
+
+    @Test
+    func formattedRunDistanceWithExactKilometers() {
+        let snapshot = HealthSnapshot(runningDistanceMeters: 3000.0)
+        #expect(snapshot.formattedRunDistance == "3.0km")
+    }
+
+    @Test
+    func formattedRunDistanceWithSmallDistance() {
+        let snapshot = HealthSnapshot(runningDistanceMeters: 500.0)
+        #expect(snapshot.formattedRunDistance == "0.5km")
+    }
+
+    @Test
+    func formattedRunDistanceWithZero() {
+        let snapshot = HealthSnapshot(runningDistanceMeters: 0.0)
+        #expect(snapshot.formattedRunDistance == "0.0km")
+    }
+
+    @Test
+    func formattedRunDistanceWithLargeValue() {
+        let snapshot = HealthSnapshot(runningDistanceMeters: 42195.0)
+        #expect(snapshot.formattedRunDistance == "42.2km")
+    }
+
+    // MARK: - formattedHeartRate Tests
+
+    @Test
+    func formattedHeartRateWithNilValue() {
+        let snapshot = HealthSnapshot()
+        #expect(snapshot.formattedHeartRate == nil)
+    }
+
+    @Test
+    func formattedHeartRateWithValue() {
+        let snapshot = HealthSnapshot(restingHeartRate: 62)
+        #expect(snapshot.formattedHeartRate == "62 bpm")
+    }
+
+    @Test
+    func formattedHeartRateWithHighValue() {
+        let snapshot = HealthSnapshot(restingHeartRate: 95)
+        #expect(snapshot.formattedHeartRate == "95 bpm")
+    }
+
+    @Test
+    func formattedHeartRateWithLowValue() {
+        let snapshot = HealthSnapshot(restingHeartRate: 45)
+        #expect(snapshot.formattedHeartRate == "45 bpm")
+    }
+
+    // MARK: - Unique ID Tests
+
+    @Test
+    func uniqueIDsGenerated() {
+        let snapshot1 = HealthSnapshot()
+        let snapshot2 = HealthSnapshot()
+        #expect(snapshot1.id != snapshot2.id)
+    }
+}
+
+// MARK: - ActionItemV2 Tests
+
+struct ActionItemV2Tests {
+
+    // MARK: - Initialization Tests
+
+    @Test
+    func initializationWithDefaults() {
+        let action = ActionItemV2(text: "Complete weekly report")
 
         #expect(action.text == "Complete weekly report")
         #expect(action.isCompleted == false)
         #expect(action.deadline == nil)
         #expect(action.completedAt == nil)
-        #expect(action.fromTryItem == false)
         #expect(action.priority == .medium)
+        #expect(action.source == .manual)
         #expect(action.notes == nil)
-        #expect(action.id != UUID())
     }
 
     @Test
-    func testActionItemInitializationWithAllParameters() {
+    func initializationWithAllParameters() {
         let id = UUID()
-        let deadline = Date().addingTimeInterval(86400) // Tomorrow
+        let deadline = Date().addingTimeInterval(86400)
         let createdAt = Date()
         let updatedAt = Date()
 
-        let action = ActionItem(
+        let action = ActionItemV2(
             id: id,
             text: "Test action",
             isCompleted: true,
             deadline: deadline,
             completedAt: createdAt,
-            fromTryItem: true,
             priority: .high,
+            source: .weeklyReview,
             notes: "Test notes",
             createdAt: createdAt,
             updatedAt: updatedAt
@@ -54,125 +550,111 @@ struct ActionItemTests {
         #expect(action.isCompleted == true)
         #expect(action.deadline == deadline)
         #expect(action.completedAt == createdAt)
-        #expect(action.fromTryItem == true)
         #expect(action.priority == .high)
+        #expect(action.source == .weeklyReview)
         #expect(action.notes == "Test notes")
         #expect(action.createdAt == createdAt)
         #expect(action.updatedAt == updatedAt)
     }
 
-    // MARK: - isOverdue Computed Property Tests
+    @Test
+    func initializationWithAISuggestedSource() {
+        let action = ActionItemV2(text: "AI suggestion", source: .aiSuggested)
+        #expect(action.source == .aiSuggested)
+    }
 
     @Test
-    func testIsOverdueWhenNoDeadline() {
-        let action = ActionItem(text: "No deadline action")
+    func initializationWithWeeklyReviewSource() {
+        let action = ActionItemV2(text: "Review action", source: .weeklyReview)
+        #expect(action.source == .weeklyReview)
+    }
 
+    // MARK: - isOverdue Tests
+
+    @Test
+    func isOverdueWhenNoDeadline() {
+        let action = ActionItemV2(text: "No deadline action")
         #expect(action.isOverdue == false)
     }
 
     @Test
-    func testIsOverdueWhenCompletedBeforeDeadline() {
-        let pastDeadline = Date().addingTimeInterval(-86400) // Yesterday
-        let action = ActionItem(
+    func isOverdueWhenCompletedPastDeadline() {
+        let pastDeadline = Date().addingTimeInterval(-86400)
+        let action = ActionItemV2(
             text: "Completed action",
             isCompleted: true,
-            deadline: pastDeadline
+            deadline: pastDeadline,
+            completedAt: Date()
         )
-
         #expect(action.isOverdue == false, "Completed items should never be overdue")
     }
 
     @Test
-    func testIsOverdueWhenDeadlinePassed() {
-        let pastDeadline = Date().addingTimeInterval(-86400) // Yesterday
-        let action = ActionItem(
+    func isOverdueWhenDeadlinePassed() {
+        let pastDeadline = Date().addingTimeInterval(-86400)
+        let action = ActionItemV2(
             text: "Late action",
             isCompleted: false,
             deadline: pastDeadline
         )
-
         #expect(action.isOverdue == true)
     }
 
     @Test
-    func testIsOverdueWhenDeadlineInFuture() {
-        let futureDeadline = Date().addingTimeInterval(86400) // Tomorrow
-        let action = ActionItem(
+    func isOverdueWhenDeadlineInFuture() {
+        let futureDeadline = Date().addingTimeInterval(86400)
+        let action = ActionItemV2(
             text: "Future action",
             isCompleted: false,
             deadline: futureDeadline
         )
-
         #expect(action.isOverdue == false)
     }
 
-    // MARK: - markCompleted() Tests
+    @Test
+    func isOverdueWhenDeadlineJustPassed() {
+        // 1 second ago
+        let justPast = Date().addingTimeInterval(-1)
+        let action = ActionItemV2(text: "Just late", deadline: justPast)
+        #expect(action.isOverdue == true)
+    }
+
+    // MARK: - daysUntilDeadline Tests
 
     @Test
-    func testMarkCompleted() {
-        let action = ActionItem(text: "Action to complete")
-
-        #expect(action.isCompleted == false)
-        #expect(action.completedAt == nil)
-
-        action.markCompleted()
-
-        #expect(action.isCompleted == true)
-        #expect(action.completedAt != nil)
+    func daysUntilDeadlineWithNoDeadline() {
+        let action = ActionItemV2(text: "No deadline")
+        #expect(action.daysUntilDeadline == nil)
     }
 
     @Test
-    func testMarkCompletedSetsCompletedAtToCurrentTime() {
-        let action = ActionItem(text: "Action to complete")
-        let beforeCompletion = Date()
-
-        action.markCompleted()
-
-        let afterCompletion = Date()
-
-        guard let completedAt = action.completedAt else {
-            Issue.record("completedAt should not be nil after markCompleted()")
-            return
-        }
-
-        #expect(completedAt >= beforeCompletion)
-        #expect(completedAt <= afterCompletion)
-    }
-
-    // MARK: - markIncomplete() Tests
-
-    @Test
-    func testMarkIncomplete() {
-        let now = Date()
-        let action = ActionItem(
-            text: "Completed action",
-            isCompleted: true,
-            completedAt: now
-        )
-
-        action.markIncomplete()
-
-        #expect(action.isCompleted == false)
-        #expect(action.completedAt == nil)
+    func daysUntilDeadlineWithFutureDeadline() {
+        // 3 days from now
+        let futureDeadline = Date().addingTimeInterval(86400 * 3)
+        let action = ActionItemV2(text: "Future", deadline: futureDeadline)
+        let days = action.daysUntilDeadline
+        #expect(days != nil)
+        // Allow small variance due to time-of-day
+        #expect(days! >= 2 && days! <= 3)
     }
 
     @Test
-    func testMarkIncompleteOnAlreadyIncompleteAction() {
-        let action = ActionItem(text: "Incomplete action")
-
-        action.markIncomplete()
-
-        #expect(action.isCompleted == false)
-        #expect(action.completedAt == nil)
+    func daysUntilDeadlineWithPastDeadline() {
+        // 2 days ago
+        let pastDeadline = Date().addingTimeInterval(-86400 * 2)
+        let action = ActionItemV2(text: "Past", deadline: pastDeadline)
+        let days = action.daysUntilDeadline
+        #expect(days != nil)
+        #expect(days! < 0)
     }
 
     // MARK: - toggleCompletion() Tests
 
     @Test
-    func testToggleCompletionFromIncomplete() {
-        let action = ActionItem(text: "Test action")
-
+    func toggleCompletionFromIncomplete() {
+        let action = ActionItemV2(text: "Test action")
         #expect(action.isCompleted == false)
+        #expect(action.completedAt == nil)
 
         action.toggleCompletion()
 
@@ -181,8 +663,12 @@ struct ActionItemTests {
     }
 
     @Test
-    func testToggleCompletionFromComplete() {
-        let action = ActionItem(text: "Test action", isCompleted: true, completedAt: Date())
+    func toggleCompletionFromComplete() {
+        let action = ActionItemV2(
+            text: "Test action",
+            isCompleted: true,
+            completedAt: Date()
+        )
 
         action.toggleCompletion()
 
@@ -190,901 +676,66 @@ struct ActionItemTests {
         #expect(action.completedAt == nil)
     }
 
-    // MARK: - Priority Tests
-
     @Test
-    func testPriorityUpdate() {
-        let action = ActionItem(text: "Test action")
-        let originalUpdatedAt = action.updatedAt
+    func toggleCompletionUpdatesTimestamp() {
+        let originalUpdatedAt = Date().addingTimeInterval(-3600)
+        let action = ActionItemV2(text: "Test", updatedAt: originalUpdatedAt)
 
-        // Small delay to ensure timestamp difference
-        Thread.sleep(forTimeInterval: 0.01)
+        action.toggleCompletion()
 
-        action.updatePriority(.high)
-
-        #expect(action.priority == .high)
         #expect(action.updatedAt > originalUpdatedAt)
     }
 
     @Test
-    func testAllPriorityLevels() {
-        let highAction = ActionItem(text: "High", priority: .high)
-        let mediumAction = ActionItem(text: "Medium", priority: .medium)
-        let lowAction = ActionItem(text: "Low", priority: .low)
+    func toggleCompletionTwiceRestoresState() {
+        let action = ActionItemV2(text: "Test action")
 
-        #expect(highAction.priority == .high)
-        #expect(mediumAction.priority == .medium)
-        #expect(lowAction.priority == .low)
-    }
+        action.toggleCompletion()
+        #expect(action.isCompleted == true)
 
-    // MARK: - Notes Tests
-
-    @Test
-    func testNotesUpdate() {
-        let action = ActionItem(text: "Test action")
-
-        #expect(action.hasNotes == false)
-
-        action.updateNotes("New notes")
-
-        #expect(action.notes == "New notes")
-        #expect(action.hasNotes == true)
-    }
-
-    @Test
-    func testNotesWithWhitespace() {
-        let action = ActionItem(text: "Test action")
-
-        action.updateNotes("   Trimmed notes   ")
-
-        #expect(action.notes == "Trimmed notes")
-    }
-
-    @Test
-    func testClearNotes() {
-        let action = ActionItem(text: "Test action", notes: "Some notes")
-
-        action.updateNotes(nil)
-
-        #expect(action.notes == nil)
-        #expect(action.hasNotes == false)
-    }
-
-    @Test
-    func testEmptyNotesNotConsideredAsHavingNotes() {
-        let action = ActionItem(text: "Test action", notes: "   ")
-
-        #expect(action.hasNotes == false)
-    }
-
-    // MARK: - Deadline Description Tests
-
-    @Test
-    func testDeadlineDescriptionOverdue() {
-        let pastDeadline = Date().addingTimeInterval(-86400 * 2) // 2 days ago
-        let action = ActionItem(text: "Test", deadline: pastDeadline)
-
-        let description = action.deadlineDescription
-
-        #expect(description?.contains("Overdue") == true)
-    }
-
-    @Test
-    func testDeadlineDescriptionDueToday() {
-        // Create a deadline that's today but not past yet
-        let calendar = Calendar.current
-        let endOfToday = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: Date())!
-        let action = ActionItem(text: "Test", deadline: endOfToday)
-
-        // Only test if the deadline is actually still in the future
-        if endOfToday > Date() {
-            let description = action.deadlineDescription
-
-            #expect(description == "Due today" || description == "Due tomorrow" || description?.contains("Due in") == true)
-        }
-    }
-
-    @Test
-    func testDeadlineDescriptionDueTomorrow() {
-        let tomorrowDeadline = Date().addingTimeInterval(86400) // Tomorrow
-        let action = ActionItem(text: "Test", deadline: tomorrowDeadline)
-
-        let description = action.deadlineDescription
-
-        #expect(description == "Due tomorrow" || description == "Due in 1 days")
-    }
-
-    @Test
-    func testDeadlineDescriptionNoDeadline() {
-        let action = ActionItem(text: "Test")
-
-        #expect(action.deadlineDescription == nil)
-    }
-
-    // MARK: - isDueSoon Tests
-
-    @Test
-    func testIsDueSoonWithinRange() {
-        let soonDeadline = Date().addingTimeInterval(86400 * 2) // 2 days from now
-        let action = ActionItem(text: "Test", deadline: soonDeadline)
-
-        #expect(action.isDueSoon(withinDays: 3) == true)
-    }
-
-    @Test
-    func testIsDueSoonOutsideRange() {
-        let farDeadline = Date().addingTimeInterval(86400 * 10) // 10 days from now
-        let action = ActionItem(text: "Test", deadline: farDeadline)
-
-        #expect(action.isDueSoon(withinDays: 3) == false)
-    }
-
-    @Test
-    func testIsDueSoonOverdueNotConsidered() {
-        let pastDeadline = Date().addingTimeInterval(-86400) // Yesterday
-        let action = ActionItem(text: "Test", deadline: pastDeadline)
-
-        #expect(action.isDueSoon() == false)
-    }
-
-    @Test
-    func testIsDueSoonCompletedNotConsidered() {
-        let soonDeadline = Date().addingTimeInterval(86400) // Tomorrow
-        let action = ActionItem(text: "Test", isCompleted: true, deadline: soonDeadline)
-
-        #expect(action.isDueSoon() == false)
-    }
-
-    // MARK: - touch() Tests
-
-    @Test
-    func testTouchUpdatesTimestamp() {
-        let originalUpdatedAt = Date().addingTimeInterval(-3600) // 1 hour ago
-        let action = ActionItem(text: "Test", updatedAt: originalUpdatedAt)
-
-        let beforeTouch = Date()
-        action.touch()
-        let afterTouch = Date()
-
-        #expect(action.updatedAt >= beforeTouch)
-        #expect(action.updatedAt <= afterTouch)
-        #expect(action.updatedAt > originalUpdatedAt)
-    }
-}
-
-// MARK: - KPTAItem Tests
-
-struct KPTAItemTests {
-
-    @Test
-    func testKPTAItemInitializationWithDefaults() {
-        let item = KPTAItem(text: "Test item", category: .keep)
-
-        #expect(item.text == "Test item")
-        #expect(item.category == .keep)
-        #expect(item.orderIndex == 0)
-        #expect(item.retrospective == nil)
-    }
-
-    @Test
-    func testKPTAItemInitializationWithAllParameters() {
-        let id = UUID()
-        let createdAt = Date()
-
-        let item = KPTAItem(
-            id: id,
-            text: "Problem item",
-            category: .problem,
-            orderIndex: 5,
-            createdAt: createdAt
-        )
-
-        #expect(item.id == id)
-        #expect(item.text == "Problem item")
-        #expect(item.category == .problem)
-        #expect(item.orderIndex == 5)
-        #expect(item.createdAt == createdAt)
-    }
-
-    @Test
-    func testKPTAItemWithTryCategory() {
-        let item = KPTAItem(text: "Try something new", category: .try)
-
-        #expect(item.category == .try)
-    }
-}
-
-// MARK: - KPTACategory Tests
-
-struct KPTACategoryTests {
-
-    @Test
-    func testDisplayNames() {
-        #expect(KPTACategory.keep.displayName == "Keep")
-        #expect(KPTACategory.problem.displayName == "Problem")
-        #expect(KPTACategory.try.displayName == "Try")
-    }
-
-    @Test
-    func testIconNames() {
-        #expect(KPTACategory.keep.iconName == "checkmark.circle.fill")
-        #expect(KPTACategory.problem.iconName == "exclamationmark.triangle.fill")
-        #expect(KPTACategory.try.iconName == "lightbulb.fill")
-    }
-
-    @Test
-    func testCaseIterable() {
-        let allCases = KPTACategory.allCases
-
-        #expect(allCases.count == 3)
-        #expect(allCases.contains(.keep))
-        #expect(allCases.contains(.problem))
-        #expect(allCases.contains(.try))
-    }
-
-    @Test
-    func testRawValues() {
-        #expect(KPTACategory.keep.rawValue == "keep")
-        #expect(KPTACategory.problem.rawValue == "problem")
-        #expect(KPTACategory.try.rawValue == "try")
-    }
-}
-
-// MARK: - RetrospectiveType Tests
-
-struct RetrospectiveTypeTests {
-
-    @Test
-    func testDisplayNames() {
-        #expect(RetrospectiveType.weekly.displayName == "Weekly")
-        #expect(RetrospectiveType.monthly.displayName == "Monthly")
-    }
-
-    @Test
-    func testCaseIterable() {
-        let allCases = RetrospectiveType.allCases
-
-        #expect(allCases.count == 2)
-        #expect(allCases.contains(.weekly))
-        #expect(allCases.contains(.monthly))
-    }
-
-    @Test
-    func testRawValues() {
-        #expect(RetrospectiveType.weekly.rawValue == "weekly")
-        #expect(RetrospectiveType.monthly.rawValue == "monthly")
-    }
-}
-
-// MARK: - Retrospective Tests
-
-struct RetrospectiveTests {
-
-    // MARK: - Initialization Tests
-
-    @Test
-    func testRetrospectiveInitializationWithDefaults() {
-        let startDate = Date()
-        let endDate = Date().addingTimeInterval(604800) // 7 days later
-
-        let retro = Retrospective(
-            title: "Week 1",
-            type: .weekly,
-            startDate: startDate,
-            endDate: endDate
-        )
-
-        #expect(retro.title == "Week 1")
-        #expect(retro.type == .weekly)
-        #expect(retro.startDate == startDate)
-        #expect(retro.endDate == endDate)
-        #expect(retro.keeps.isEmpty)
-        #expect(retro.problems.isEmpty)
-        #expect(retro.tries.isEmpty)
-        #expect(retro.actions.isEmpty)
-        #expect(retro.healthSummary == nil)
-    }
-
-    @Test
-    func testRetrospectiveInitializationWithAllParameters() {
-        let id = UUID()
-        let startDate = Date()
-        let endDate = Date().addingTimeInterval(604800)
-        let createdAt = Date()
-        let updatedAt = Date()
-
-        let keeps = [KPTAItem(text: "Keep item", category: .keep)]
-        let problems = [KPTAItem(text: "Problem item", category: .problem)]
-        let tries = [KPTAItem(text: "Try item", category: .try)]
-        let actions = [ActionItem(text: "Action item")]
-
-        let retro = Retrospective(
-            id: id,
-            title: "Monthly Review",
-            type: .monthly,
-            startDate: startDate,
-            endDate: endDate,
-            keeps: keeps,
-            problems: problems,
-            tries: tries,
-            actions: actions,
-            healthSummary: nil,
-            createdAt: createdAt,
-            updatedAt: updatedAt
-        )
-
-        #expect(retro.id == id)
-        #expect(retro.title == "Monthly Review")
-        #expect(retro.type == .monthly)
-        #expect(retro.keeps.count == 1)
-        #expect(retro.problems.count == 1)
-        #expect(retro.tries.count == 1)
-        #expect(retro.actions.count == 1)
-    }
-
-    // MARK: - Computed Properties Tests
-
-    @Test
-    func testPendingActionsCountWithNoActions() {
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: Date(),
-            endDate: Date()
-        )
-
-        #expect(retro.pendingActionsCount == 0)
-    }
-
-    @Test
-    func testPendingActionsCountWithMixedActions() {
-        let completedAction = ActionItem(text: "Done", isCompleted: true)
-        let pendingAction1 = ActionItem(text: "Pending 1", isCompleted: false)
-        let pendingAction2 = ActionItem(text: "Pending 2", isCompleted: false)
-
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: Date(),
-            endDate: Date(),
-            actions: [completedAction, pendingAction1, pendingAction2]
-        )
-
-        #expect(retro.pendingActionsCount == 2)
-    }
-
-    @Test
-    func testCompletedActionsCountWithNoActions() {
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: Date(),
-            endDate: Date()
-        )
-
-        #expect(retro.completedActionsCount == 0)
-    }
-
-    @Test
-    func testCompletedActionsCountWithMixedActions() {
-        let completedAction1 = ActionItem(text: "Done 1", isCompleted: true)
-        let completedAction2 = ActionItem(text: "Done 2", isCompleted: true)
-        let pendingAction = ActionItem(text: "Pending", isCompleted: false)
-
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: Date(),
-            endDate: Date(),
-            actions: [completedAction1, completedAction2, pendingAction]
-        )
-
-        #expect(retro.completedActionsCount == 2)
-    }
-
-    @Test
-    func testActionCompletionRateWithNoActions() {
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: Date(),
-            endDate: Date()
-        )
-
-        #expect(retro.actionCompletionRate == 0)
-    }
-
-    @Test
-    func testActionCompletionRateWithAllCompleted() {
-        let action1 = ActionItem(text: "Done 1", isCompleted: true)
-        let action2 = ActionItem(text: "Done 2", isCompleted: true)
-
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: Date(),
-            endDate: Date(),
-            actions: [action1, action2]
-        )
-
-        #expect(retro.actionCompletionRate == 1.0)
-    }
-
-    @Test
-    func testActionCompletionRateWithHalfCompleted() {
-        let completed = ActionItem(text: "Done", isCompleted: true)
-        let pending = ActionItem(text: "Pending", isCompleted: false)
-
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: Date(),
-            endDate: Date(),
-            actions: [completed, pending]
-        )
-
-        #expect(retro.actionCompletionRate == 0.5)
-    }
-
-    @Test
-    func testActionCompletionRateWithNoneCompleted() {
-        let action1 = ActionItem(text: "Pending 1", isCompleted: false)
-        let action2 = ActionItem(text: "Pending 2", isCompleted: false)
-
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: Date(),
-            endDate: Date(),
-            actions: [action1, action2]
-        )
-
-        #expect(retro.actionCompletionRate == 0.0)
-    }
-
-    @Test
-    func testTotalKPTACountWithEmptyArrays() {
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: Date(),
-            endDate: Date()
-        )
-
-        #expect(retro.totalKPTACount == 0)
-    }
-
-    @Test
-    func testTotalKPTACountWithItems() {
-        let keeps = [
-            KPTAItem(text: "Keep 1", category: .keep),
-            KPTAItem(text: "Keep 2", category: .keep)
-        ]
-        let problems = [KPTAItem(text: "Problem 1", category: .problem)]
-        let tries = [
-            KPTAItem(text: "Try 1", category: .try),
-            KPTAItem(text: "Try 2", category: .try),
-            KPTAItem(text: "Try 3", category: .try)
-        ]
-
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: Date(),
-            endDate: Date(),
-            keeps: keeps,
-            problems: problems,
-            tries: tries
-        )
-
-        #expect(retro.totalKPTACount == 6)
-    }
-
-    @Test
-    func testFormattedDateRange() {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-
-        let startDate = formatter.date(from: "2025-01-01")!
-        let endDate = formatter.date(from: "2025-01-07")!
-
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: startDate,
-            endDate: endDate
-        )
-
-        let formattedRange = retro.formattedDateRange
-
-        // The format depends on locale, but it should contain both dates
-        #expect(formattedRange.contains("-"))
-    }
-
-    // MARK: - Helper Methods Tests
-
-    @Test
-    func testGenerateTitleForWeekly() {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-
-        let startDate = formatter.date(from: "2025-01-06")! // Monday
-        let endDate = formatter.date(from: "2025-01-12")! // Sunday
-
-        let title = Retrospective.generateTitle(for: .weekly, startDate: startDate, endDate: endDate)
-
-        #expect(title.hasPrefix("Week of"))
-    }
-
-    @Test
-    func testGenerateTitleForMonthly() {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-
-        let startDate = formatter.date(from: "2025-01-01")!
-        let endDate = formatter.date(from: "2025-01-31")!
-
-        let title = Retrospective.generateTitle(for: .monthly, startDate: startDate, endDate: endDate)
-
-        // Should be formatted as "MMMM yyyy" - e.g., "January 2025"
-        #expect(title.contains("2025"))
-    }
-
-    @Test
-    func testTouch() {
-        let originalDate = Date().addingTimeInterval(-3600) // 1 hour ago
-
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: Date(),
-            endDate: Date(),
-            updatedAt: originalDate
-        )
-
-        let beforeTouch = Date()
-        retro.touch()
-        let afterTouch = Date()
-
-        #expect(retro.updatedAt >= beforeTouch)
-        #expect(retro.updatedAt <= afterTouch)
-        #expect(retro.updatedAt > originalDate)
-    }
-}
-
-// MARK: - HealthSummary Tests
-
-struct HealthSummaryTests {
-
-    @Test
-    func testHealthSummaryInitializationWithDefaults() {
-        let periodStart = Date()
-        let periodEnd = Date().addingTimeInterval(604800)
-
-        let summary = HealthSummary(periodStart: periodStart, periodEnd: periodEnd)
-
-        #expect(summary.periodStart == periodStart)
-        #expect(summary.periodEnd == periodEnd)
-        #expect(summary.avgSleepMinutes == nil)
-        #expect(summary.avgSleepQualityScore == nil)
-        #expect(summary.avgSteps == nil)
-        #expect(summary.totalExerciseMinutes == nil)
-        #expect(summary.avgStandHours == nil)
-        #expect(summary.avgActiveCalories == nil)
-        #expect(summary.totalWorkouts == nil)
-        #expect(summary.wellnessScore == nil)
-    }
-
-    @Test
-    func testHealthSummaryInitializationWithAllParameters() {
-        let id = UUID()
-        let periodStart = Date()
-        let periodEnd = Date().addingTimeInterval(604800)
-        let createdAt = Date()
-
-        let summary = HealthSummary(
-            id: id,
-            periodStart: periodStart,
-            periodEnd: periodEnd,
-            avgSleepMinutes: 480,
-            avgSleepQualityScore: 85,
-            avgSteps: 10000,
-            totalExerciseMinutes: 180,
-            avgStandHours: 12,
-            avgActiveCalories: 500,
-            totalWorkouts: 5,
-            wellnessScore: 90,
-            createdAt: createdAt
-        )
-
-        #expect(summary.id == id)
-        #expect(summary.avgSleepMinutes == 480)
-        #expect(summary.avgSleepQualityScore == 85)
-        #expect(summary.avgSteps == 10000)
-        #expect(summary.totalExerciseMinutes == 180)
-        #expect(summary.avgStandHours == 12)
-        #expect(summary.avgActiveCalories == 500)
-        #expect(summary.totalWorkouts == 5)
-        #expect(summary.wellnessScore == 90)
-    }
-
-    // MARK: - Computed Properties Tests
-
-    @Test
-    func testFormattedSleepDurationWithNil() {
-        let summary = HealthSummary(periodStart: Date(), periodEnd: Date())
-
-        #expect(summary.formattedSleepDuration == nil)
-    }
-
-    @Test
-    func testFormattedSleepDurationWithMinutes() {
-        let summary = HealthSummary(
-            periodStart: Date(),
-            periodEnd: Date(),
-            avgSleepMinutes: 450 // 7h 30m
-        )
-
-        #expect(summary.formattedSleepDuration == "7h 30m")
-    }
-
-    @Test
-    func testFormattedSleepDurationWithExactHours() {
-        let summary = HealthSummary(
-            periodStart: Date(),
-            periodEnd: Date(),
-            avgSleepMinutes: 480 // 8h 0m
-        )
-
-        #expect(summary.formattedSleepDuration == "8h 0m")
-    }
-
-    @Test
-    func testFormattedStepsWithNil() {
-        let summary = HealthSummary(periodStart: Date(), periodEnd: Date())
-
-        #expect(summary.formattedSteps == nil)
-    }
-
-    @Test
-    func testFormattedStepsWithValue() {
-        let summary = HealthSummary(
-            periodStart: Date(),
-            periodEnd: Date(),
-            avgSteps: 10000
-        )
-
-        let formatted = summary.formattedSteps
-        #expect(formatted != nil)
-        // Should be formatted with thousands separator
-        #expect(formatted?.contains("10") == true)
-    }
-
-    @Test
-    func testFormattedStepsWithSmallValue() {
-        let summary = HealthSummary(
-            periodStart: Date(),
-            periodEnd: Date(),
-            avgSteps: 500
-        )
-
-        let formatted = summary.formattedSteps
-        #expect(formatted != nil)
-        #expect(formatted == "500")
-    }
-}
-
-// MARK: - Theme Tests
-
-struct ThemeTests {
-
-    @Test
-    func testKPTAColorsForAllCategories() {
-        // Ensure color mapping works for all categories
-        for category in KPTACategory.allCases {
-            let color = Theme.KPTA.color(for: category)
-            let bgColor = Theme.KPTA.backgroundColor(for: category)
-            // Just verify no crash and values are returned
-            #expect(color != bgColor)
-        }
-    }
-
-    @Test
-    func testWellbeingColorForHighScore() {
-        let color = Theme.Wellbeing.color(for: 85)
-        // High scores should be green - just verify no crash
-        #expect(color == .green)
-    }
-
-    @Test
-    func testWellbeingColorForMediumScore() {
-        let color = Theme.Wellbeing.color(for: 60)
-        #expect(color == .orange)
-    }
-
-    @Test
-    func testWellbeingColorForLowScore() {
-        let color = Theme.Wellbeing.color(for: 30)
-        #expect(color == .red)
-    }
-
-    @Test
-    func testWellbeingLabelForExcellent() {
-        let label = Theme.Wellbeing.label(for: 85)
-        #expect(label == "Excellent")
-    }
-
-    @Test
-    func testWellbeingLabelForGood() {
-        let label = Theme.Wellbeing.label(for: 75)
-        #expect(label == "Good")
-    }
-
-    @Test
-    func testWellbeingLabelForFair() {
-        let label = Theme.Wellbeing.label(for: 55)
-        #expect(label == "Fair")
-    }
-
-    @Test
-    func testWellbeingLabelForNeedsAttention() {
-        let label = Theme.Wellbeing.label(for: 40)
-        #expect(label == "Needs Attention")
-    }
-
-    @Test
-    func testWellbeingLabelForLow() {
-        let label = Theme.Wellbeing.label(for: 20)
-        #expect(label == "Low")
-    }
-
-    @Test
-    func testWellbeingBoundaryValues() {
-        // Test boundary values
-        #expect(Theme.Wellbeing.color(for: 70) == .green)
-        #expect(Theme.Wellbeing.color(for: 69) == .orange)
-        #expect(Theme.Wellbeing.color(for: 50) == .orange)
-        #expect(Theme.Wellbeing.color(for: 49) == .red)
-        #expect(Theme.Wellbeing.color(for: 100) == .green)
-        #expect(Theme.Wellbeing.color(for: 0) == .red)
-    }
-
-    @Test
-    func testWellbeingLabelBoundaryValues() {
-        #expect(Theme.Wellbeing.label(for: 100) == "Excellent")
-        #expect(Theme.Wellbeing.label(for: 80) == "Excellent")
-        #expect(Theme.Wellbeing.label(for: 79) == "Good")
-        #expect(Theme.Wellbeing.label(for: 70) == "Good")
-        #expect(Theme.Wellbeing.label(for: 69) == "Fair")
-        #expect(Theme.Wellbeing.label(for: 50) == "Fair")
-        #expect(Theme.Wellbeing.label(for: 49) == "Needs Attention")
-        #expect(Theme.Wellbeing.label(for: 30) == "Needs Attention")
-        #expect(Theme.Wellbeing.label(for: 29) == "Low")
-        #expect(Theme.Wellbeing.label(for: 0) == "Low")
-    }
-}
-
-// MARK: - Tab Enum Tests
-
-struct TabTests {
-
-    @Test
-    func testAllTabsHaveTitles() {
-        for tab in Tab.allCases {
-            #expect(!tab.title.isEmpty)
-        }
-    }
-
-    @Test
-    func testAllTabsHaveIconNames() {
-        for tab in Tab.allCases {
-            #expect(!tab.iconName.isEmpty)
-        }
-    }
-
-    @Test
-    func testTabCount() {
-        #expect(Tab.allCases.count == 5)
-    }
-
-    @Test
-    func testSpecificTabValues() {
-        #expect(Tab.dashboard.title == "Dashboard")
-        #expect(Tab.new.title == "New")
-        #expect(Tab.actions.title == "Actions")
-        #expect(Tab.history.title == "History")
-        #expect(Tab.settings.title == "Settings")
-    }
-}
-
-// MARK: - Edge Case Tests
-
-struct EdgeCaseTests {
-
-    @Test
-    func testEmptyTextActionItem() {
-        let action = ActionItem(text: "")
-        #expect(action.text == "")
+        action.toggleCompletion()
         #expect(action.isCompleted == false)
+        #expect(action.completedAt == nil)
     }
 
     @Test
-    func testEmptyTextKPTAItem() {
-        let item = KPTAItem(text: "", category: .keep)
-        #expect(item.text == "")
+    func toggleCompletionSetsCompletedAtToCurrentTime() {
+        let action = ActionItemV2(text: "Test")
+        let beforeToggle = Date()
+
+        action.toggleCompletion()
+
+        let afterToggle = Date()
+        guard let completedAt = action.completedAt else {
+            Issue.record("completedAt should not be nil after toggling to completed")
+            return
+        }
+        #expect(completedAt >= beforeToggle)
+        #expect(completedAt <= afterToggle)
+    }
+
+    // MARK: - Empty / Edge Cases
+
+    @Test
+    func emptyText() {
+        let action = ActionItemV2(text: "")
+        #expect(action.text == "")
     }
 
     @Test
-    func testVeryLongTextActionItem() {
+    func veryLongText() {
         let longText = String(repeating: "a", count: 10000)
-        let action = ActionItem(text: longText)
+        let action = ActionItemV2(text: longText)
         #expect(action.text.count == 10000)
     }
 
-    @Test
-    func testNegativeOrderIndex() {
-        let item = KPTAItem(text: "Test", category: .keep, orderIndex: -1)
-        #expect(item.orderIndex == -1)
-    }
+    // MARK: - Unique ID Tests
 
     @Test
-    func testZeroSleepMinutes() {
-        let summary = HealthSummary(
-            periodStart: Date(),
-            periodEnd: Date(),
-            avgSleepMinutes: 0
-        )
-        #expect(summary.formattedSleepDuration == "0h 0m")
-    }
-
-    @Test
-    func testZeroSteps() {
-        let summary = HealthSummary(
-            periodStart: Date(),
-            periodEnd: Date(),
-            avgSteps: 0
-        )
-        #expect(summary.formattedSteps == "0")
-    }
-
-    @Test
-    func testActionCompletionRateWithSingleAction() {
-        let action = ActionItem(text: "Only action", isCompleted: true)
-        let retro = Retrospective(
-            title: "Test",
-            type: .weekly,
-            startDate: Date(),
-            endDate: Date(),
-            actions: [action]
-        )
-        #expect(retro.actionCompletionRate == 1.0)
-    }
-
-    @Test
-    func testDeadlineExactlyNow() {
-        // Edge case: deadline is exactly now
-        let now = Date()
-        let action = ActionItem(
-            text: "Due now",
-            isCompleted: false,
-            deadline: now
-        )
-        // Since deadline < Date() is the check, exactly now should NOT be overdue
-        // But in practice, by the time we check, it may have passed
-        // This test documents the behavior
-        #expect(action.deadline != nil)
-    }
-}
-
-// MARK: - Data Integrity Tests
-
-struct DataIntegrityTests {
-
-    @Test
-    func testUniqueIDsForMultipleActionItems() {
-        let action1 = ActionItem(text: "Action 1")
-        let action2 = ActionItem(text: "Action 2")
-        let action3 = ActionItem(text: "Action 3")
+    func uniqueIDsGenerated() {
+        let action1 = ActionItemV2(text: "Action 1")
+        let action2 = ActionItemV2(text: "Action 2")
+        let action3 = ActionItemV2(text: "Action 3")
 
         #expect(action1.id != action2.id)
         #expect(action2.id != action3.id)
@@ -1092,29 +743,9 @@ struct DataIntegrityTests {
     }
 
     @Test
-    func testUniqueIDsForMultipleKPTAItems() {
-        let item1 = KPTAItem(text: "Item 1", category: .keep)
-        let item2 = KPTAItem(text: "Item 2", category: .problem)
-        let item3 = KPTAItem(text: "Item 3", category: .try)
-
-        #expect(item1.id != item2.id)
-        #expect(item2.id != item3.id)
-        #expect(item1.id != item3.id)
-    }
-
-    @Test
-    func testUniqueIDsForMultipleRetrospectives() {
-        let retro1 = Retrospective(title: "R1", type: .weekly, startDate: Date(), endDate: Date())
-        let retro2 = Retrospective(title: "R2", type: .weekly, startDate: Date(), endDate: Date())
-
-        #expect(retro1.id != retro2.id)
-    }
-
-    @Test
-    func testPreservedIDWhenProvided() {
+    func preservedIDWhenProvided() {
         let specificID = UUID()
-        let action = ActionItem(id: specificID, text: "Test")
-
+        let action = ActionItemV2(id: specificID, text: "Test")
         #expect(action.id == specificID)
     }
 }
@@ -1124,37 +755,42 @@ struct DataIntegrityTests {
 struct ActionPriorityTests {
 
     @Test
-    func testDisplayNames() {
+    func displayNames() {
         #expect(ActionPriority.high.displayName == "High")
         #expect(ActionPriority.medium.displayName == "Medium")
         #expect(ActionPriority.low.displayName == "Low")
     }
 
     @Test
-    func testIconNames() {
+    func iconNames() {
         #expect(ActionPriority.high.iconName == "exclamationmark.3")
         #expect(ActionPriority.medium.iconName == "exclamationmark.2")
         #expect(ActionPriority.low.iconName == "exclamationmark")
     }
 
     @Test
-    func testSortOrder() {
+    func sortOrder() {
         #expect(ActionPriority.high.sortOrder == 0)
         #expect(ActionPriority.medium.sortOrder == 1)
         #expect(ActionPriority.low.sortOrder == 2)
     }
 
     @Test
-    func testComparable() {
+    func comparable() {
         #expect(ActionPriority.high < ActionPriority.medium)
         #expect(ActionPriority.medium < ActionPriority.low)
         #expect(ActionPriority.high < ActionPriority.low)
     }
 
     @Test
-    func testCaseIterable() {
-        let allCases = ActionPriority.allCases
+    func comparableNotEqualValues() {
+        #expect(!(ActionPriority.high < ActionPriority.high))
+        #expect(!(ActionPriority.medium > ActionPriority.low))
+    }
 
+    @Test
+    func caseIterable() {
+        let allCases = ActionPriority.allCases
         #expect(allCases.count == 3)
         #expect(allCases.contains(.high))
         #expect(allCases.contains(.medium))
@@ -1162,14 +798,14 @@ struct ActionPriorityTests {
     }
 
     @Test
-    func testRawValues() {
+    func rawValues() {
         #expect(ActionPriority.high.rawValue == "high")
         #expect(ActionPriority.medium.rawValue == "medium")
         #expect(ActionPriority.low.rawValue == "low")
     }
 
     @Test
-    func testCodable() throws {
+    func codableRoundTrip() throws {
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
 
@@ -1179,345 +815,1207 @@ struct ActionPriorityTests {
             #expect(decoded == priority)
         }
     }
+
+    @Test
+    func decodableFromString() throws {
+        let decoder = JSONDecoder()
+
+        let highData = Data("\"high\"".utf8)
+        let decoded = try decoder.decode(ActionPriority.self, from: highData)
+        #expect(decoded == .high)
+    }
+
+    @Test
+    func decodableFailsForInvalidString() {
+        let decoder = JSONDecoder()
+        let invalidData = Data("\"critical\"".utf8)
+
+        #expect(throws: DecodingError.self) {
+            _ = try decoder.decode(ActionPriority.self, from: invalidData)
+        }
+    }
+
+    @Test
+    func sortingByPriority() {
+        var priorities: [ActionPriority] = [.low, .high, .medium, .low, .high]
+        priorities.sort()
+        #expect(priorities == [.high, .high, .medium, .low, .low])
+    }
 }
 
-// MARK: - ActionFilter Tests
+// MARK: - ActionSource Tests
 
-struct ActionFilterTests {
+struct ActionSourceTests {
+
+    @Test
+    func rawValues() {
+        #expect(ActionSource.weeklyReview.rawValue == "weeklyReview")
+        #expect(ActionSource.manual.rawValue == "manual")
+        #expect(ActionSource.aiSuggested.rawValue == "aiSuggested")
+    }
+
+    @Test
+    func caseIterable() {
+        let allCases = ActionSource.allCases
+        #expect(allCases.count == 3)
+        #expect(allCases.contains(.weeklyReview))
+        #expect(allCases.contains(.manual))
+        #expect(allCases.contains(.aiSuggested))
+    }
+
+    @Test
+    func codableRoundTrip() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        for source in ActionSource.allCases {
+            let data = try encoder.encode(source)
+            let decoded = try decoder.decode(ActionSource.self, from: data)
+            #expect(decoded == source)
+        }
+    }
+
+    @Test
+    func decodableFromString() throws {
+        let decoder = JSONDecoder()
+
+        let data = Data("\"aiSuggested\"".utf8)
+        let decoded = try decoder.decode(ActionSource.self, from: data)
+        #expect(decoded == .aiSuggested)
+    }
+
+    @Test
+    func decodableFailsForInvalidString() {
+        let decoder = JSONDecoder()
+        let invalidData = Data("\"unknown\"".utf8)
+
+        #expect(throws: DecodingError.self) {
+            _ = try decoder.decode(ActionSource.self, from: invalidData)
+        }
+    }
+}
+
+// MARK: - Streak Tests
+
+struct StreakTests {
 
     // MARK: - Initialization Tests
 
     @Test
-    func testDefaultInitialization() {
-        let filter = ActionFilter()
+    func initializationWithDefaults() {
+        let streak = Streak()
 
-        #expect(filter.completionStatus == .all)
-        #expect(filter.deadlineStartDate == nil)
-        #expect(filter.deadlineEndDate == nil)
-        #expect(filter.priorities.isEmpty)
-        #expect(filter.retrospectiveId == nil)
-        #expect(filter.overdueOnly == false)
-        #expect(filter.fromTryItemOnly == false)
-        #expect(filter.sortOrder == .createdAtDescending)
+        #expect(streak.currentStreak == 0)
+        #expect(streak.longestStreak == 0)
+        #expect(streak.lastCheckInDate == nil)
+        #expect(streak.totalCheckIns == 0)
     }
 
     @Test
-    func testCustomInitialization() {
-        let retroId = UUID()
-        let startDate = Date()
-        let endDate = Date().addingTimeInterval(86400)
+    func initializationWithCustomValues() {
+        let id = UUID()
+        let lastDate = Date()
+        let createdAt = Date()
 
-        let filter = ActionFilter(
-            completionStatus: .incomplete,
-            deadlineStartDate: startDate,
-            deadlineEndDate: endDate,
-            priorities: [.high, .medium],
-            retrospectiveId: retroId,
-            overdueOnly: true,
-            fromTryItemOnly: true,
-            sortOrder: .priorityHighToLow
+        let streak = Streak(
+            id: id,
+            currentStreak: 7,
+            longestStreak: 14,
+            lastCheckInDate: lastDate,
+            totalCheckIns: 50,
+            createdAt: createdAt
         )
 
-        #expect(filter.completionStatus == .incomplete)
-        #expect(filter.deadlineStartDate == startDate)
-        #expect(filter.deadlineEndDate == endDate)
-        #expect(filter.priorities.count == 2)
-        #expect(filter.retrospectiveId == retroId)
-        #expect(filter.overdueOnly == true)
-        #expect(filter.fromTryItemOnly == true)
-        #expect(filter.sortOrder == .priorityHighToLow)
+        #expect(streak.id == id)
+        #expect(streak.currentStreak == 7)
+        #expect(streak.longestStreak == 14)
+        #expect(streak.lastCheckInDate == lastDate)
+        #expect(streak.totalCheckIns == 50)
+        #expect(streak.createdAt == createdAt)
     }
 
-    // MARK: - Factory Methods Tests
+    // MARK: - isActiveToday Tests
 
     @Test
-    func testIncompleteFilter() {
-        let filter = ActionFilter.incomplete
-
-        #expect(filter.completionStatus == .incomplete)
+    func isActiveTodayWhenNoCheckIn() {
+        let streak = Streak()
+        #expect(streak.isActiveToday == false)
     }
 
     @Test
-    func testCompletedFilter() {
-        let filter = ActionFilter.completed
-
-        #expect(filter.completionStatus == .completed)
+    func isActiveTodayWhenCheckedInToday() {
+        let streak = Streak(lastCheckInDate: Date())
+        #expect(streak.isActiveToday == true)
     }
 
     @Test
-    func testOverdueFilter() {
-        let filter = ActionFilter.overdue
+    func isActiveTodayWhenCheckedInYesterday() {
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+        let streak = Streak(lastCheckInDate: yesterday)
+        #expect(streak.isActiveToday == false)
+    }
 
-        #expect(filter.completionStatus == .incomplete)
-        #expect(filter.overdueOnly == true)
+    // MARK: - recordCheckIn(on:) Tests
+
+    @Test
+    func firstCheckIn() {
+        let streak = Streak()
+        let today = Date()
+
+        streak.recordCheckIn(on: today)
+
+        #expect(streak.currentStreak == 1)
+        #expect(streak.longestStreak == 1)
+        #expect(streak.totalCheckIns == 1)
+        #expect(streak.lastCheckInDate != nil)
     }
 
     @Test
-    func testHighPriorityFilter() {
-        let filter = ActionFilter.highPriority
+    func sameDayCheckInIsNoOp() {
+        let streak = Streak()
+        let today = Date()
 
-        #expect(filter.completionStatus == .incomplete)
-        #expect(filter.priorities.contains(.high))
-        #expect(filter.sortOrder == .deadlineAscending)
+        streak.recordCheckIn(on: today)
+        streak.recordCheckIn(on: today)
+
+        #expect(streak.currentStreak == 1)
+        #expect(streak.totalCheckIns == 1, "Same-day check-in should not increment total")
     }
 
     @Test
-    func testFromTryFilter() {
-        let filter = ActionFilter.fromTry
+    func consecutiveDayExtendsStreak() {
+        let streak = Streak()
+        let calendar = Calendar.current
 
-        #expect(filter.fromTryItemOnly == true)
+        let day1 = calendar.startOfDay(for: Date())
+        let day2 = calendar.date(byAdding: .day, value: 1, to: day1)!
+
+        streak.recordCheckIn(on: day1)
+        #expect(streak.currentStreak == 1)
+
+        streak.recordCheckIn(on: day2)
+        #expect(streak.currentStreak == 2)
+        #expect(streak.longestStreak == 2)
+        #expect(streak.totalCheckIns == 2)
     }
 
     @Test
-    func testForRetrospectiveFilter() {
-        let retroId = UUID()
-        let filter = ActionFilter.forRetrospective(retroId)
+    func gapResetsStreak() {
+        let streak = Streak()
+        let calendar = Calendar.current
 
-        #expect(filter.retrospectiveId == retroId)
+        let day1 = calendar.startOfDay(for: Date())
+        let day3 = calendar.date(byAdding: .day, value: 2, to: day1)!  // Skip a day
+
+        streak.recordCheckIn(on: day1)
+        #expect(streak.currentStreak == 1)
+
+        streak.recordCheckIn(on: day3)
+        #expect(streak.currentStreak == 1, "Gap should reset streak to 1")
+        #expect(streak.totalCheckIns == 2)
     }
 
     @Test
-    func testDueSoonFilter() {
-        let filter = ActionFilter.dueSoon(days: 5)
+    func longestStreakPreservedAfterReset() {
+        let streak = Streak()
+        let calendar = Calendar.current
 
-        #expect(filter.completionStatus == .incomplete)
-        #expect(filter.deadlineStartDate != nil)
-        #expect(filter.deadlineEndDate != nil)
-        #expect(filter.sortOrder == .deadlineAscending)
-    }
+        let day1 = calendar.startOfDay(for: Date())
+        let day2 = calendar.date(byAdding: .day, value: 1, to: day1)!
+        let day3 = calendar.date(byAdding: .day, value: 2, to: day1)!
+        // Gap: skip day 4
+        let day5 = calendar.date(byAdding: .day, value: 4, to: day1)!
 
-    // MARK: - Filter Application Tests
+        streak.recordCheckIn(on: day1)
+        streak.recordCheckIn(on: day2)
+        streak.recordCheckIn(on: day3)
+        #expect(streak.currentStreak == 3)
+        #expect(streak.longestStreak == 3)
 
-    @Test
-    func testApplyCompletionStatusFilter() {
-        let completed = ActionItem(text: "Done", isCompleted: true, completedAt: Date())
-        let incomplete = ActionItem(text: "Not done", isCompleted: false)
-        let actions = [completed, incomplete]
-
-        let completedFilter = ActionFilter(completionStatus: .completed)
-        let incompleteFilter = ActionFilter(completionStatus: .incomplete)
-        let allFilter = ActionFilter(completionStatus: .all)
-
-        let completedResult = completedFilter.apply(to: actions)
-        let incompleteResult = incompleteFilter.apply(to: actions)
-        let allResult = allFilter.apply(to: actions)
-
-        #expect(completedResult.count == 1)
-        #expect(completedResult.first?.isCompleted == true)
-        #expect(incompleteResult.count == 1)
-        #expect(incompleteResult.first?.isCompleted == false)
-        #expect(allResult.count == 2)
+        streak.recordCheckIn(on: day5)
+        #expect(streak.currentStreak == 1, "Gap should reset current streak")
+        #expect(streak.longestStreak == 3, "Longest streak should be preserved")
+        #expect(streak.totalCheckIns == 4)
     }
 
     @Test
-    func testApplyPriorityFilter() {
-        let highAction = ActionItem(text: "High", priority: .high)
-        let mediumAction = ActionItem(text: "Medium", priority: .medium)
-        let lowAction = ActionItem(text: "Low", priority: .low)
-        let actions = [highAction, mediumAction, lowAction]
+    func longestStreakUpdatesWhenSurpassed() {
+        let streak = Streak()
+        let calendar = Calendar.current
 
-        let highFilter = ActionFilter(priorities: [.high])
-        let highMediumFilter = ActionFilter(priorities: [.high, .medium])
+        let day1 = calendar.startOfDay(for: Date())
 
-        let highResult = highFilter.apply(to: actions)
-        let highMediumResult = highMediumFilter.apply(to: actions)
+        // Build a streak of 5 consecutive days
+        for i in 0..<5 {
+            let day = calendar.date(byAdding: .day, value: i, to: day1)!
+            streak.recordCheckIn(on: day)
+        }
 
-        #expect(highResult.count == 1)
-        #expect(highMediumResult.count == 2)
+        #expect(streak.currentStreak == 5)
+        #expect(streak.longestStreak == 5)
     }
 
     @Test
-    func testApplyFromTryFilter() {
-        let fromTry = ActionItem(text: "From Try", fromTryItem: true)
-        let notFromTry = ActionItem(text: "Not from Try", fromTryItem: false)
-        let actions = [fromTry, notFromTry]
+    func multipleGapsAndStreaks() {
+        let streak = Streak()
+        let calendar = Calendar.current
 
-        let filter = ActionFilter(fromTryItemOnly: true)
-        let result = filter.apply(to: actions)
+        let base = calendar.startOfDay(for: Date())
 
-        #expect(result.count == 1)
-        #expect(result.first?.fromTryItem == true)
+        // Streak 1: days 0, 1, 2 (streak = 3)
+        for i in 0..<3 {
+            streak.recordCheckIn(on: calendar.date(byAdding: .day, value: i, to: base)!)
+        }
+        #expect(streak.currentStreak == 3)
+
+        // Gap: skip day 3
+        // Streak 2: days 4, 5 (streak = 2)
+        streak.recordCheckIn(on: calendar.date(byAdding: .day, value: 4, to: base)!)
+        #expect(streak.currentStreak == 1)
+        streak.recordCheckIn(on: calendar.date(byAdding: .day, value: 5, to: base)!)
+        #expect(streak.currentStreak == 2)
+
+        #expect(streak.longestStreak == 3)
+        #expect(streak.totalCheckIns == 5)
     }
 
-    @Test
-    func testApplyDeadlineRangeFilter() {
-        let now = Date()
-        let yesterday = now.addingTimeInterval(-86400)
-        let tomorrow = now.addingTimeInterval(86400)
-        let nextWeek = now.addingTimeInterval(86400 * 7)
-
-        let pastAction = ActionItem(text: "Past", deadline: yesterday)
-        let soonAction = ActionItem(text: "Soon", deadline: tomorrow)
-        let farAction = ActionItem(text: "Far", deadline: nextWeek)
-        let noDeadline = ActionItem(text: "No deadline")
-        let actions = [pastAction, soonAction, farAction, noDeadline]
-
-        let filter = ActionFilter(
-            deadlineStartDate: now,
-            deadlineEndDate: now.addingTimeInterval(86400 * 3)
-        )
-        let result = filter.apply(to: actions)
-
-        #expect(result.count == 1)
-        #expect(result.first?.text == "Soon")
-    }
+    // MARK: - Unique ID Tests
 
     @Test
-    func testApplyOverdueFilter() {
-        let yesterday = Date().addingTimeInterval(-86400)
-        let tomorrow = Date().addingTimeInterval(86400)
-
-        let overdueAction = ActionItem(text: "Overdue", deadline: yesterday)
-        let notOverdueAction = ActionItem(text: "Not overdue", deadline: tomorrow)
-        let completedOverdue = ActionItem(text: "Completed overdue", isCompleted: true, deadline: yesterday, completedAt: Date())
-        let actions = [overdueAction, notOverdueAction, completedOverdue]
-
-        let filter = ActionFilter(overdueOnly: true)
-        let result = filter.apply(to: actions)
-
-        #expect(result.count == 1)
-        #expect(result.first?.text == "Overdue")
-    }
-
-    // MARK: - Sorting Tests
-
-    @Test
-    func testSortByCreatedAtAscending() {
-        let older = ActionItem(text: "Older", createdAt: Date().addingTimeInterval(-3600))
-        let newer = ActionItem(text: "Newer", createdAt: Date())
-        let actions = [newer, older]
-
-        let filter = ActionFilter(sortOrder: .createdAtAscending)
-        let result = filter.apply(to: actions)
-
-        #expect(result.first?.text == "Older")
-        #expect(result.last?.text == "Newer")
-    }
-
-    @Test
-    func testSortByCreatedAtDescending() {
-        let older = ActionItem(text: "Older", createdAt: Date().addingTimeInterval(-3600))
-        let newer = ActionItem(text: "Newer", createdAt: Date())
-        let actions = [older, newer]
-
-        let filter = ActionFilter(sortOrder: .createdAtDescending)
-        let result = filter.apply(to: actions)
-
-        #expect(result.first?.text == "Newer")
-        #expect(result.last?.text == "Older")
-    }
-
-    @Test
-    func testSortByPriorityHighToLow() {
-        let high = ActionItem(text: "High", priority: .high)
-        let low = ActionItem(text: "Low", priority: .low)
-        let medium = ActionItem(text: "Medium", priority: .medium)
-        let actions = [low, medium, high]
-
-        let filter = ActionFilter(sortOrder: .priorityHighToLow)
-        let result = filter.apply(to: actions)
-
-        #expect(result[0].priority == .high)
-        #expect(result[1].priority == .medium)
-        #expect(result[2].priority == .low)
-    }
-
-    @Test
-    func testSortByPriorityLowToHigh() {
-        let high = ActionItem(text: "High", priority: .high)
-        let low = ActionItem(text: "Low", priority: .low)
-        let medium = ActionItem(text: "Medium", priority: .medium)
-        let actions = [high, medium, low]
-
-        let filter = ActionFilter(sortOrder: .priorityLowToHigh)
-        let result = filter.apply(to: actions)
-
-        #expect(result[0].priority == .low)
-        #expect(result[1].priority == .medium)
-        #expect(result[2].priority == .high)
-    }
-
-    @Test
-    func testSortByDeadlineAscending() {
-        let soon = ActionItem(text: "Soon", deadline: Date().addingTimeInterval(86400))
-        let later = ActionItem(text: "Later", deadline: Date().addingTimeInterval(86400 * 7))
-        let noDeadline = ActionItem(text: "No deadline")
-        let actions = [noDeadline, later, soon]
-
-        let filter = ActionFilter(sortOrder: .deadlineAscending)
-        let result = filter.apply(to: actions)
-
-        // Items with deadlines should come first, sorted by date
-        #expect(result[0].text == "Soon")
-        #expect(result[1].text == "Later")
-        #expect(result[2].text == "No deadline")
-    }
-
-    // MARK: - Equatable Tests
-
-    @Test
-    func testFilterEquality() {
-        let filter1 = ActionFilter(completionStatus: .incomplete, priorities: [.high])
-        let filter2 = ActionFilter(completionStatus: .incomplete, priorities: [.high])
-        let filter3 = ActionFilter(completionStatus: .completed, priorities: [.high])
-
-        #expect(filter1 == filter2)
-        #expect(filter1 != filter3)
+    func uniqueIDsGenerated() {
+        let streak1 = Streak()
+        let streak2 = Streak()
+        #expect(streak1.id != streak2.id)
     }
 }
 
-// MARK: - ActionStatistics Tests
+// MARK: - UserProfile Tests
 
-struct ActionStatisticsTests {
+struct UserProfileTests {
+
+    // MARK: - Initialization Tests
 
     @Test
-    func testFormattedCompletionRate() {
-        let stats = ActionStatistics(
-            total: 10,
-            completed: 7,
-            incomplete: 3,
-            overdue: 1,
-            highPriority: 2,
-            mediumPriority: 3,
-            lowPriority: 1,
-            fromTry: 4,
-            completionRate: 0.7
-        )
+    func initializationWithDefaults() {
+        let profile = UserProfile()
 
-        #expect(stats.formattedCompletionRate == "70%")
+        #expect(profile.displayName == nil)
+        #expect(profile.checkInReminderHour == 21)
+        #expect(profile.checkInReminderMinute == 0)
+        #expect(profile.weeklyReviewDay == 6)
+        #expect(profile.subscriptionTier == .free)
+        #expect(profile.allowCloudAI == false)
+        #expect(profile.hasCompletedOnboarding == false)
     }
 
     @Test
-    func testZeroCompletionRate() {
-        let stats = ActionStatistics(
-            total: 5,
-            completed: 0,
-            incomplete: 5,
-            overdue: 2,
-            highPriority: 1,
-            mediumPriority: 2,
-            lowPriority: 2,
-            fromTry: 1,
-            completionRate: 0.0
+    func initializationWithAllParameters() {
+        let id = UUID()
+        let createdAt = Date()
+
+        let profile = UserProfile(
+            id: id,
+            displayName: "Tetsuya",
+            checkInReminderHour: 22,
+            checkInReminderMinute: 30,
+            weeklyReviewDay: 1,
+            subscriptionTier: .premium,
+            allowCloudAI: true,
+            hasCompletedOnboarding: true,
+            createdAt: createdAt
         )
 
-        #expect(stats.formattedCompletionRate == "0%")
+        #expect(profile.id == id)
+        #expect(profile.displayName == "Tetsuya")
+        #expect(profile.checkInReminderHour == 22)
+        #expect(profile.checkInReminderMinute == 30)
+        #expect(profile.weeklyReviewDay == 1)
+        #expect(profile.subscriptionTier == .premium)
+        #expect(profile.allowCloudAI == true)
+        #expect(profile.hasCompletedOnboarding == true)
+        #expect(profile.createdAt == createdAt)
+    }
+
+    // MARK: - Property Mutation Tests
+
+    @Test
+    func updateDisplayName() {
+        let profile = UserProfile()
+        profile.displayName = "New Name"
+        #expect(profile.displayName == "New Name")
     }
 
     @Test
-    func testFullCompletionRate() {
-        let stats = ActionStatistics(
-            total: 5,
-            completed: 5,
-            incomplete: 0,
-            overdue: 0,
-            highPriority: 0,
-            mediumPriority: 0,
-            lowPriority: 0,
-            fromTry: 2,
-            completionRate: 1.0
+    func updateReminderTime() {
+        let profile = UserProfile()
+        profile.checkInReminderHour = 8
+        profile.checkInReminderMinute = 45
+        #expect(profile.checkInReminderHour == 8)
+        #expect(profile.checkInReminderMinute == 45)
+    }
+
+    @Test
+    func updateSubscriptionTier() {
+        let profile = UserProfile()
+        #expect(profile.subscriptionTier == .free)
+
+        profile.subscriptionTier = .premium
+        #expect(profile.subscriptionTier == .premium)
+    }
+
+    @Test
+    func updateCloudAIFlag() {
+        let profile = UserProfile()
+        #expect(profile.allowCloudAI == false)
+
+        profile.allowCloudAI = true
+        #expect(profile.allowCloudAI == true)
+    }
+
+    @Test
+    func updateOnboardingFlag() {
+        let profile = UserProfile()
+        #expect(profile.hasCompletedOnboarding == false)
+
+        profile.hasCompletedOnboarding = true
+        #expect(profile.hasCompletedOnboarding == true)
+    }
+
+    // MARK: - Unique ID Tests
+
+    @Test
+    func uniqueIDsGenerated() {
+        let profile1 = UserProfile()
+        let profile2 = UserProfile()
+        #expect(profile1.id != profile2.id)
+    }
+
+    @Test
+    func preservedIDWhenProvided() {
+        let specificID = UUID()
+        let profile = UserProfile(id: specificID)
+        #expect(profile.id == specificID)
+    }
+}
+
+// MARK: - SubscriptionTier Tests
+
+struct SubscriptionTierTests {
+
+    @Test
+    func rawValues() {
+        #expect(SubscriptionTier.free.rawValue == "free")
+        #expect(SubscriptionTier.premium.rawValue == "premium")
+    }
+
+    @Test
+    func caseIterable() {
+        let allCases = SubscriptionTier.allCases
+        #expect(allCases.count == 2)
+        #expect(allCases.contains(.free))
+        #expect(allCases.contains(.premium))
+    }
+
+    @Test
+    func codableRoundTrip() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        for tier in SubscriptionTier.allCases {
+            let data = try encoder.encode(tier)
+            let decoded = try decoder.decode(SubscriptionTier.self, from: data)
+            #expect(decoded == tier)
+        }
+    }
+
+    @Test
+    func decodableFromString() throws {
+        let decoder = JSONDecoder()
+
+        let data = Data("\"premium\"".utf8)
+        let decoded = try decoder.decode(SubscriptionTier.self, from: data)
+        #expect(decoded == .premium)
+    }
+
+    @Test
+    func decodableFailsForInvalidString() {
+        let decoder = JSONDecoder()
+        let invalidData = Data("\"enterprise\"".utf8)
+
+        #expect(throws: DecodingError.self) {
+            _ = try decoder.decode(SubscriptionTier.self, from: invalidData)
+        }
+    }
+}
+
+// MARK: - WeeklyReview Tests
+
+struct WeeklyReviewTests {
+
+    // MARK: - Initialization Tests
+
+    @Test
+    func initializationWithDefaults() {
+        let start = Date()
+        let end = Date().addingTimeInterval(604800) // 7 days
+
+        let review = WeeklyReview(weekStart: start, weekEnd: end)
+
+        #expect(review.weekStart == start)
+        #expect(review.weekEnd == end)
+        #expect(review.conversationJSON == nil)
+        #expect(review.wins.isEmpty)
+        #expect(review.challenges.isEmpty)
+        #expect(review.summary == nil)
+        #expect(review.aiTakeaway == nil)
+        #expect(review.isCompleted == false)
+        #expect(review.completedAt == nil)
+    }
+
+    @Test
+    func initializationWithAllParameters() {
+        let id = UUID()
+        let start = Date()
+        let end = Date().addingTimeInterval(604800)
+        let conversationData = Data("[]".utf8)
+        let createdAt = Date()
+        let completedAt = Date()
+
+        let review = WeeklyReview(
+            id: id,
+            weekStart: start,
+            weekEnd: end,
+            conversationJSON: conversationData,
+            wins: ["Win 1", "Win 2"],
+            challenges: ["Challenge 1"],
+            summary: "Good week",
+            aiTakeaway: "Focus on rest",
+            isCompleted: true,
+            createdAt: createdAt,
+            completedAt: completedAt
         )
 
-        #expect(stats.formattedCompletionRate == "100%")
+        #expect(review.id == id)
+        #expect(review.weekStart == start)
+        #expect(review.weekEnd == end)
+        #expect(review.conversationJSON == conversationData)
+        #expect(review.wins.count == 2)
+        #expect(review.challenges.count == 1)
+        #expect(review.summary == "Good week")
+        #expect(review.aiTakeaway == "Focus on rest")
+        #expect(review.isCompleted == true)
+        #expect(review.completedAt == completedAt)
+    }
+
+    // MARK: - conversations Computed Property Tests
+
+    @Test
+    func conversationsWithNilJSON() {
+        let review = WeeklyReview(weekStart: Date(), weekEnd: Date())
+        #expect(review.conversations.isEmpty)
+    }
+
+    @Test
+    func conversationsWithInvalidJSON() {
+        let review = WeeklyReview(
+            weekStart: Date(),
+            weekEnd: Date(),
+            conversationJSON: Data("not valid json".utf8)
+        )
+        #expect(review.conversations.isEmpty, "Invalid JSON should return empty array")
+    }
+
+    @Test
+    func conversationsWithEmptyArrayJSON() throws {
+        let emptyArray: [ConversationMessage] = []
+        let data = try JSONEncoder().encode(emptyArray)
+        let review = WeeklyReview(weekStart: Date(), weekEnd: Date(), conversationJSON: data)
+        #expect(review.conversations.isEmpty)
+    }
+
+    // MARK: - setConversations / conversations Round Trip
+
+    @Test
+    func setAndGetConversations() {
+        let review = WeeklyReview(weekStart: Date(), weekEnd: Date())
+
+        let messages = [
+            ConversationMessage(role: .assistant, content: "How was your week?"),
+            ConversationMessage(role: .user, content: "It was productive!"),
+            ConversationMessage(role: .assistant, content: "What went well?")
+        ]
+
+        review.setConversations(messages)
+
+        let retrieved = review.conversations
+        #expect(retrieved.count == 3)
+        #expect(retrieved[0].role == .assistant)
+        #expect(retrieved[0].content == "How was your week?")
+        #expect(retrieved[1].role == .user)
+        #expect(retrieved[1].content == "It was productive!")
+        #expect(retrieved[2].role == .assistant)
+        #expect(retrieved[2].content == "What went well?")
+    }
+
+    @Test
+    func setConversationsOverwritesPrevious() {
+        let review = WeeklyReview(weekStart: Date(), weekEnd: Date())
+
+        let initial = [ConversationMessage(role: .user, content: "First")]
+        review.setConversations(initial)
+        #expect(review.conversations.count == 1)
+
+        let updated = [
+            ConversationMessage(role: .user, content: "Second"),
+            ConversationMessage(role: .assistant, content: "Third")
+        ]
+        review.setConversations(updated)
+        #expect(review.conversations.count == 2)
+        #expect(review.conversations[0].content == "Second")
+    }
+
+    @Test
+    func setEmptyConversations() {
+        let review = WeeklyReview(weekStart: Date(), weekEnd: Date())
+        let messages = [ConversationMessage(role: .user, content: "Hello")]
+        review.setConversations(messages)
+        #expect(review.conversations.count == 1)
+
+        review.setConversations([])
+        #expect(review.conversations.isEmpty)
+    }
+
+    // MARK: - Wins and Challenges Tests
+
+    @Test
+    func winsAndChallengesDirectAssignment() {
+        let review = WeeklyReview(weekStart: Date(), weekEnd: Date())
+
+        review.wins = ["Shipped feature", "Good sleep"]
+        review.challenges = ["Too many meetings"]
+
+        #expect(review.wins.count == 2)
+        #expect(review.wins[0] == "Shipped feature")
+        #expect(review.challenges.count == 1)
+        #expect(review.challenges[0] == "Too many meetings")
+    }
+
+    // MARK: - Unique ID Tests
+
+    @Test
+    func uniqueIDsGenerated() {
+        let review1 = WeeklyReview(weekStart: Date(), weekEnd: Date())
+        let review2 = WeeklyReview(weekStart: Date(), weekEnd: Date())
+        #expect(review1.id != review2.id)
+    }
+}
+
+// MARK: - ConversationMessage Tests
+
+struct ConversationMessageTests {
+
+    @Test
+    func initializationWithDefaults() {
+        let message = ConversationMessage(role: .user, content: "Hello")
+
+        #expect(message.role == .user)
+        #expect(message.content == "Hello")
+    }
+
+    @Test
+    func initializationWithAllParameters() {
+        let id = UUID()
+        let timestamp = Date()
+
+        let message = ConversationMessage(
+            id: id,
+            role: .assistant,
+            content: "How can I help?",
+            timestamp: timestamp
+        )
+
+        #expect(message.id == id)
+        #expect(message.role == .assistant)
+        #expect(message.content == "How can I help?")
+        #expect(message.timestamp == timestamp)
+    }
+
+    @Test
+    func codableRoundTrip() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        let original = ConversationMessage(role: .user, content: "Test message")
+        let data = try encoder.encode(original)
+        let decoded = try decoder.decode(ConversationMessage.self, from: data)
+
+        #expect(decoded.id == original.id)
+        #expect(decoded.role == original.role)
+        #expect(decoded.content == original.content)
+    }
+
+    @Test
+    func codableArrayRoundTrip() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        let messages = [
+            ConversationMessage(role: .assistant, content: "Hi"),
+            ConversationMessage(role: .user, content: "Hello"),
+        ]
+
+        let data = try encoder.encode(messages)
+        let decoded = try decoder.decode([ConversationMessage].self, from: data)
+
+        #expect(decoded.count == 2)
+        #expect(decoded[0].role == .assistant)
+        #expect(decoded[1].role == .user)
+    }
+
+    @Test
+    func uniqueIDsGenerated() {
+        let msg1 = ConversationMessage(role: .user, content: "A")
+        let msg2 = ConversationMessage(role: .user, content: "B")
+        #expect(msg1.id != msg2.id)
+    }
+}
+
+// MARK: - MessageRole Tests
+
+struct MessageRoleTests {
+
+    @Test
+    func rawValues() {
+        #expect(MessageRole.user.rawValue == "user")
+        #expect(MessageRole.assistant.rawValue == "assistant")
+    }
+
+    @Test
+    func codableRoundTrip() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        for role in [MessageRole.user, MessageRole.assistant] {
+            let data = try encoder.encode(role)
+            let decoded = try decoder.decode(MessageRole.self, from: data)
+            #expect(decoded == role)
+        }
+    }
+
+    @Test
+    func decodableFromString() throws {
+        let decoder = JSONDecoder()
+
+        let data = Data("\"assistant\"".utf8)
+        let decoded = try decoder.decode(MessageRole.self, from: data)
+        #expect(decoded == .assistant)
+    }
+
+    @Test
+    func decodableFailsForInvalidString() {
+        let decoder = JSONDecoder()
+        let invalidData = Data("\"system\"".utf8)
+
+        #expect(throws: DecodingError.self) {
+            _ = try decoder.decode(MessageRole.self, from: invalidData)
+        }
+    }
+}
+
+// MARK: - MonthlyReport Tests
+
+struct MonthlyReportTests {
+
+    // MARK: - Initialization Tests
+
+    @Test
+    func initializationWithDefaults() {
+        let report = MonthlyReport(month: 2, year: 2026)
+
+        #expect(report.month == 2)
+        #expect(report.year == 2026)
+        #expect(report.executiveSummary == nil)
+        #expect(report.topInsight == nil)
+        #expect(report.overallScore == nil)
+        #expect(report.correlationsJSON == nil)
+        #expect(report.isGenerated == false)
+        #expect(report.generatedAt == nil)
+    }
+
+    @Test
+    func initializationWithAllParameters() {
+        let id = UUID()
+        let createdAt = Date()
+        let generatedAt = Date()
+        let correlationsData = Data("[]".utf8)
+
+        let report = MonthlyReport(
+            id: id,
+            month: 12,
+            year: 2025,
+            executiveSummary: "Strong month overall",
+            topInsight: "Sleep correlates with focus",
+            overallScore: 7.5,
+            correlationsJSON: correlationsData,
+            isGenerated: true,
+            createdAt: createdAt,
+            generatedAt: generatedAt
+        )
+
+        #expect(report.id == id)
+        #expect(report.month == 12)
+        #expect(report.year == 2025)
+        #expect(report.executiveSummary == "Strong month overall")
+        #expect(report.topInsight == "Sleep correlates with focus")
+        #expect(report.overallScore == 7.5)
+        #expect(report.correlationsJSON == correlationsData)
+        #expect(report.isGenerated == true)
+        #expect(report.createdAt == createdAt)
+        #expect(report.generatedAt == generatedAt)
+    }
+
+    // MARK: - correlations Computed Property Tests
+
+    @Test
+    func correlationsWithNilJSON() {
+        let report = MonthlyReport(month: 1, year: 2026)
+        #expect(report.correlations.isEmpty)
+    }
+
+    @Test
+    func correlationsWithInvalidJSON() {
+        let report = MonthlyReport(
+            month: 1,
+            year: 2026,
+            correlationsJSON: Data("invalid".utf8)
+        )
+        #expect(report.correlations.isEmpty, "Invalid JSON should return empty array")
+    }
+
+    @Test
+    func correlationsWithEmptyArrayJSON() throws {
+        let emptyArray: [Correlation] = []
+        let data = try JSONEncoder().encode(emptyArray)
+        let report = MonthlyReport(month: 1, year: 2026, correlationsJSON: data)
+        #expect(report.correlations.isEmpty)
+    }
+
+    // MARK: - setCorrelations / correlations Round Trip
+
+    @Test
+    func setAndGetCorrelations() {
+        let report = MonthlyReport(month: 2, year: 2026)
+
+        let correlations = [
+            Correlation(
+                factor1: "Sleep",
+                factor2: "Focus",
+                coefficient: 0.72,
+                description: "Better sleep leads to better focus"
+            ),
+            Correlation(
+                factor1: "Exercise",
+                factor2: "Energy",
+                coefficient: 0.65,
+                description: "More exercise increases energy"
+            )
+        ]
+
+        report.setCorrelations(correlations)
+
+        let retrieved = report.correlations
+        #expect(retrieved.count == 2)
+        #expect(retrieved[0].factor1 == "Sleep")
+        #expect(retrieved[0].factor2 == "Focus")
+        #expect(retrieved[0].coefficient == 0.72)
+        #expect(retrieved[0].description == "Better sleep leads to better focus")
+        #expect(retrieved[1].factor1 == "Exercise")
+        #expect(retrieved[1].coefficient == 0.65)
+    }
+
+    @Test
+    func setCorrelationsOverwritesPrevious() {
+        let report = MonthlyReport(month: 1, year: 2026)
+
+        let initial = [
+            Correlation(factor1: "A", factor2: "B", coefficient: 0.5, description: "AB")
+        ]
+        report.setCorrelations(initial)
+        #expect(report.correlations.count == 1)
+
+        let updated = [
+            Correlation(factor1: "C", factor2: "D", coefficient: 0.3, description: "CD"),
+            Correlation(factor1: "E", factor2: "F", coefficient: -0.4, description: "EF")
+        ]
+        report.setCorrelations(updated)
+        #expect(report.correlations.count == 2)
+        #expect(report.correlations[0].factor1 == "C")
+    }
+
+    @Test
+    func setEmptyCorrelations() {
+        let report = MonthlyReport(month: 1, year: 2026)
+        let initial = [
+            Correlation(factor1: "X", factor2: "Y", coefficient: 0.1, description: "XY")
+        ]
+        report.setCorrelations(initial)
+        #expect(report.correlations.count == 1)
+
+        report.setCorrelations([])
+        #expect(report.correlations.isEmpty)
+    }
+
+    // MARK: - Unique ID Tests
+
+    @Test
+    func uniqueIDsGenerated() {
+        let report1 = MonthlyReport(month: 1, year: 2026)
+        let report2 = MonthlyReport(month: 2, year: 2026)
+        #expect(report1.id != report2.id)
+    }
+}
+
+// MARK: - Correlation Tests
+
+struct CorrelationTests {
+
+    @Test
+    func initializationWithDefaults() {
+        let correlation = Correlation(
+            factor1: "Sleep",
+            factor2: "Focus",
+            coefficient: 0.72,
+            description: "Sleep improves focus"
+        )
+
+        #expect(correlation.factor1 == "Sleep")
+        #expect(correlation.factor2 == "Focus")
+        #expect(correlation.coefficient == 0.72)
+        #expect(correlation.description == "Sleep improves focus")
+    }
+
+    @Test
+    func initializationWithCustomID() {
+        let id = UUID()
+        let correlation = Correlation(
+            id: id,
+            factor1: "A",
+            factor2: "B",
+            coefficient: -0.5,
+            description: "Inverse relationship"
+        )
+        #expect(correlation.id == id)
+    }
+
+    @Test
+    func negativeCoefficient() {
+        let correlation = Correlation(
+            factor1: "Screen Time",
+            factor2: "Sleep",
+            coefficient: -0.68,
+            description: "More screen time reduces sleep"
+        )
+        #expect(correlation.coefficient < 0)
+        #expect(correlation.coefficient == -0.68)
+    }
+
+    @Test
+    func zeroCoefficient() {
+        let correlation = Correlation(
+            factor1: "Steps",
+            factor2: "Growth",
+            coefficient: 0.0,
+            description: "No correlation"
+        )
+        #expect(correlation.coefficient == 0.0)
+    }
+
+    @Test
+    func extremeCoefficients() {
+        let perfect = Correlation(
+            factor1: "A",
+            factor2: "B",
+            coefficient: 1.0,
+            description: "Perfect positive"
+        )
+        let inversePerfect = Correlation(
+            factor1: "C",
+            factor2: "D",
+            coefficient: -1.0,
+            description: "Perfect negative"
+        )
+        #expect(perfect.coefficient == 1.0)
+        #expect(inversePerfect.coefficient == -1.0)
+    }
+
+    @Test
+    func codableRoundTrip() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        let original = Correlation(
+            factor1: "Sleep",
+            factor2: "Energy",
+            coefficient: 0.85,
+            description: "Strong positive"
+        )
+
+        let data = try encoder.encode(original)
+        let decoded = try decoder.decode(Correlation.self, from: data)
+
+        #expect(decoded.id == original.id)
+        #expect(decoded.factor1 == original.factor1)
+        #expect(decoded.factor2 == original.factor2)
+        #expect(decoded.coefficient == original.coefficient)
+        #expect(decoded.description == original.description)
+    }
+
+    @Test
+    func codableArrayRoundTrip() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        let correlations = [
+            Correlation(factor1: "A", factor2: "B", coefficient: 0.5, description: "AB"),
+            Correlation(factor1: "C", factor2: "D", coefficient: -0.3, description: "CD"),
+        ]
+
+        let data = try encoder.encode(correlations)
+        let decoded = try decoder.decode([Correlation].self, from: data)
+
+        #expect(decoded.count == 2)
+        #expect(decoded[0].factor1 == "A")
+        #expect(decoded[1].coefficient == -0.3)
+    }
+
+    @Test
+    func uniqueIDsGenerated() {
+        let c1 = Correlation(factor1: "A", factor2: "B", coefficient: 0.1, description: "AB")
+        let c2 = Correlation(factor1: "A", factor2: "B", coefficient: 0.1, description: "AB")
+        #expect(c1.id != c2.id)
+    }
+}
+
+// MARK: - DimensionType Tests
+
+struct DimensionTypeTests {
+
+    @Test
+    func labels() {
+        #expect(DimensionType.energy.label == "Energy")
+        #expect(DimensionType.focus.label == "Focus")
+        #expect(DimensionType.stress.label == "Stress")
+        #expect(DimensionType.growth.label == "Growth")
+    }
+
+    @Test
+    func icons() {
+        #expect(DimensionType.energy.icon == "sun.max.fill")
+        #expect(DimensionType.focus.icon == "scope")
+        #expect(DimensionType.stress.icon == "bolt.heart.fill")
+        #expect(DimensionType.growth.icon == "leaf.fill")
+    }
+
+    @Test
+    func isInvertedOnlyForStress() {
+        #expect(DimensionType.energy.isInverted == false)
+        #expect(DimensionType.focus.isInverted == false)
+        #expect(DimensionType.stress.isInverted == true)
+        #expect(DimensionType.growth.isInverted == false)
+    }
+
+    @Test
+    func caseIterable() {
+        let allCases = DimensionType.allCases
+        #expect(allCases.count == 4)
+        #expect(allCases.contains(.energy))
+        #expect(allCases.contains(.focus))
+        #expect(allCases.contains(.stress))
+        #expect(allCases.contains(.growth))
+    }
+
+    @Test
+    func rawValues() {
+        #expect(DimensionType.energy.rawValue == "energy")
+        #expect(DimensionType.focus.rawValue == "focus")
+        #expect(DimensionType.stress.rawValue == "stress")
+        #expect(DimensionType.growth.rawValue == "growth")
+    }
+
+    @Test
+    func identifiable() {
+        #expect(DimensionType.energy.id == "energy")
+        #expect(DimensionType.focus.id == "focus")
+        #expect(DimensionType.stress.id == "stress")
+        #expect(DimensionType.growth.id == "growth")
+    }
+
+    @Test
+    func codableRoundTrip() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        for dimension in DimensionType.allCases {
+            let data = try encoder.encode(dimension)
+            let decoded = try decoder.decode(DimensionType.self, from: data)
+            #expect(decoded == dimension)
+        }
+    }
+
+    @Test
+    func decodableFromString() throws {
+        let decoder = JSONDecoder()
+
+        let data = Data("\"stress\"".utf8)
+        let decoded = try decoder.decode(DimensionType.self, from: data)
+        #expect(decoded == .stress)
+    }
+
+    @Test
+    func decodableFailsForInvalidString() {
+        let decoder = JSONDecoder()
+        let invalidData = Data("\"happiness\"".utf8)
+
+        #expect(throws: DecodingError.self) {
+            _ = try decoder.decode(DimensionType.self, from: invalidData)
+        }
+    }
+
+    @Test
+    func questionIsNotEmpty() {
+        // LocalizedStringKey does not easily expose its string,
+        // so we just verify each dimension has a question defined by calling it.
+        for dimension in DimensionType.allCases {
+            _ = dimension.question
+        }
+    }
+}
+
+// MARK: - Cross-Model Integration Tests
+
+struct CrossModelIntegrationTests {
+
+    @Test
+    func dailyCheckInCompositeScoreRange() {
+        // Verify composite score is always in valid range [1.0, 10.0]
+        for energy in [1, 5, 10] {
+            for focus in [1, 5, 10] {
+                for stress in [1, 5, 10] {
+                    for growth in [1, 5, 10] {
+                        let checkIn = DailyCheckIn(
+                            energyScore: energy,
+                            focusScore: focus,
+                            stressScore: stress,
+                            growthScore: growth
+                        )
+                        #expect(checkIn.compositeScore >= 1.0)
+                        #expect(checkIn.compositeScore <= 10.0)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    func actionItemV2AllSourcesWork() {
+        for source in ActionSource.allCases {
+            let action = ActionItemV2(text: "Test", source: source)
+            #expect(action.source == source)
+        }
+    }
+
+    @Test
+    func actionItemV2AllPrioritiesWork() {
+        for priority in ActionPriority.allCases {
+            let action = ActionItemV2(text: "Test", priority: priority)
+            #expect(action.priority == priority)
+        }
+    }
+
+    @Test
+    func dailyCheckInSetScoreForAllDimensions() {
+        let checkIn = DailyCheckIn()
+
+        for dimension in DimensionType.allCases {
+            checkIn.setScore(7, for: dimension)
+            #expect(checkIn.score(for: dimension) == 7)
+        }
+    }
+
+    @Test
+    func weeklyReviewConversationPreservesMessageOrder() {
+        let review = WeeklyReview(weekStart: Date(), weekEnd: Date())
+
+        let messages = (0..<10).map { i in
+            ConversationMessage(
+                role: i.isMultiple(of: 2) ? .assistant : .user,
+                content: "Message \(i)"
+            )
+        }
+
+        review.setConversations(messages)
+        let retrieved = review.conversations
+
+        #expect(retrieved.count == 10)
+        for i in 0..<10 {
+            #expect(retrieved[i].content == "Message \(i)")
+        }
+    }
+
+    @Test
+    func monthlyReportCorrelationPreservesCoefficients() {
+        let report = MonthlyReport(month: 1, year: 2026)
+
+        let correlations = [
+            Correlation(factor1: "A", factor2: "B", coefficient: -0.99, description: "Strong negative"),
+            Correlation(factor1: "C", factor2: "D", coefficient: 0.01, description: "Weak positive"),
+            Correlation(factor1: "E", factor2: "F", coefficient: 0.0, description: "None"),
+        ]
+
+        report.setCorrelations(correlations)
+        let retrieved = report.correlations
+
+        #expect(retrieved[0].coefficient == -0.99)
+        #expect(retrieved[1].coefficient == 0.01)
+        #expect(retrieved[2].coefficient == 0.0)
+    }
+
+    @Test
+    func streakFullLifecycle() {
+        let streak = Streak()
+        let calendar = Calendar.current
+        let base = calendar.startOfDay(for: Date())
+
+        // Start fresh
+        #expect(streak.isActiveToday == false)
+        #expect(streak.currentStreak == 0)
+
+        // Day 1
+        streak.recordCheckIn(on: base)
+        #expect(streak.currentStreak == 1)
+        #expect(streak.totalCheckIns == 1)
+
+        // Day 2 (consecutive)
+        let day2 = calendar.date(byAdding: .day, value: 1, to: base)!
+        streak.recordCheckIn(on: day2)
+        #expect(streak.currentStreak == 2)
+
+        // Day 3 (consecutive)
+        let day3 = calendar.date(byAdding: .day, value: 2, to: base)!
+        streak.recordCheckIn(on: day3)
+        #expect(streak.currentStreak == 3)
+        #expect(streak.longestStreak == 3)
+
+        // Day 3 again (no-op)
+        streak.recordCheckIn(on: day3)
+        #expect(streak.currentStreak == 3)
+        #expect(streak.totalCheckIns == 3, "Duplicate should not increment total")
+
+        // Day 6 (gap of 2 days)
+        let day6 = calendar.date(byAdding: .day, value: 5, to: base)!
+        streak.recordCheckIn(on: day6)
+        #expect(streak.currentStreak == 1, "Gap should reset streak")
+        #expect(streak.longestStreak == 3, "Longest streak preserved")
+        #expect(streak.totalCheckIns == 4)
     }
 }

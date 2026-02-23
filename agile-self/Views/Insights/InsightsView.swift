@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 import Charts
 
 // MARK: - Time Period
@@ -20,37 +21,45 @@ enum TimePeriod: String, CaseIterable {
 // MARK: - Insights View
 
 struct InsightsView: View {
+    var onShowWeeklyReview: (() -> Void)?
+    var onShowMonthlyReport: (() -> Void)?
+
+    @Environment(AppContainer.self) private var appContainer
+    @Environment(\.modelContext) private var modelContext
+
+    // MARK: - ViewModel
+
+    @State private var viewModel = InsightsViewModel()
+
+    // MARK: - UI State
+
     @State private var selectedPeriod: TimePeriod = .month
     @State private var activeDimensions: Set<DimensionType> = []
     @State private var animateChart = false
 
-    private let checkIns = MockData.monthlyCheckIns
-    private let report = MockData.monthlyReport
-    private let streak = MockData.streak
-
     /// Check-ins filtered by the selected time period.
     private var filteredCheckIns: [DailyCheckIn] {
-        switch selectedPeriod {
-        case .week:
-            return Array(checkIns.suffix(7))
-        case .month:
-            return Array(checkIns.suffix(30))
-        case .quarter:
-            return Array(checkIns.suffix(30)) // Mock: only 30 days available
-        case .year:
-            return checkIns
-        }
+        viewModel.filteredCheckIns
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
-                    periodPicker
-                    scoreTrendSection
-                    correlationsSection
-                    patternsSection
-                    streakSection
+                    if let error = viewModel.errorMessage {
+                        insightsErrorView(message: error)
+                    } else if viewModel.isLoading {
+                        insightsLoadingView
+                    } else if viewModel.allCheckIns.isEmpty {
+                        insightsEmptyView
+                    } else {
+                        periodPicker
+                        scoreTrendSection
+                        correlationsSection
+                        patternsSection
+                        streakSection
+                        reviewActionsSection
+                    }
                     Spacer(minLength: Theme.Spacing.xxl)
                 }
                 .padding(.horizontal, Theme.Spacing.md)
@@ -63,7 +72,87 @@ struct InsightsView: View {
                     animateChart = true
                 }
             }
+            .task {
+                viewModel.configure(
+                    aiService: appContainer.aiService,
+                    streakService: appContainer.streakService,
+                    analyticsService: appContainer.analyticsService
+                )
+                viewModel.loadData(context: modelContext)
+                await viewModel.loadPatterns()
+            }
+            .onChange(of: selectedPeriod) { _, newValue in
+                viewModel.selectedPeriod = newValue
+            }
         }
+    }
+
+    // MARK: - Loading State
+
+    private var insightsLoadingView: some View {
+        VStack(spacing: Theme.Spacing.lg) {
+            Spacer(minLength: 100)
+            ProgressView()
+                .tint(Theme.Colors.accentStart)
+                .scaleEffect(1.2)
+            Text("Loading insights...")
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textTertiary)
+            Spacer(minLength: 100)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Error State
+
+    private func insightsErrorView(message: String) -> some View {
+        VStack(spacing: Theme.Spacing.md) {
+            Spacer(minLength: 80)
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(Theme.Colors.warning)
+
+            Text("Something went wrong")
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.textPrimary)
+
+            Text(message)
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                viewModel.loadData(context: modelContext)
+            } label: {
+                Text("Try Again")
+                    .secondaryButtonStyle()
+            }
+            Spacer(minLength: 80)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Empty State
+
+    private var insightsEmptyView: some View {
+        VStack(spacing: Theme.Spacing.md) {
+            Spacer(minLength: 60)
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .font(.system(size: 48))
+                .foregroundStyle(Theme.Colors.accentStart.opacity(0.5))
+
+            Text("No Check-ins Yet")
+                .font(Theme.Typography.title2)
+                .foregroundStyle(Theme.Colors.textPrimary)
+
+            Text("Start logging daily check-ins to see trends, patterns, and AI-powered insights here.")
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Theme.Spacing.lg)
+            Spacer(minLength: 60)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Period Picker
@@ -234,8 +323,15 @@ struct InsightsView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(title: "HEALTH CORRELATIONS", icon: "arrow.triangle.branch")
 
-            ForEach(report.correlations) { correlation in
-                CorrelationCard(correlation: correlation)
+            if viewModel.correlations.isEmpty {
+                Text("Correlations will appear once enough data is collected.")
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .padding(.vertical, Theme.Spacing.md)
+            } else {
+                ForEach(viewModel.correlations) { correlation in
+                    CorrelationCard(correlation: correlation)
+                }
             }
         }
     }
@@ -246,21 +342,19 @@ struct InsightsView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(title: "AI PATTERNS", icon: "brain.head.profile.fill")
 
-            PatternCard(
-                title: "Focus peaks on run days",
-                description: "Your focus scores are 23% higher on days you go for a run."
-            )
-
-            PatternCard(
-                title: "Sleep affects stress",
-                description: "Sleep quality below 7h correlates with higher stress the next day."
-            )
-
-            PatternCard(
-                title: "Midweek energy dip",
-                description: "Wednesday is consistently your lowest energy day.",
-                icon: "chart.line.downtrend.xyaxis"
-            )
+            if viewModel.patterns.isEmpty {
+                Text("Patterns will be discovered as you log more check-ins.")
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .padding(.vertical, Theme.Spacing.md)
+            } else {
+                ForEach(Array(viewModel.patterns.enumerated()), id: \.offset) { _, pattern in
+                    PatternCard(
+                        title: pattern,
+                        description: ""
+                    )
+                }
+            }
         }
     }
 
@@ -272,21 +366,21 @@ struct InsightsView: View {
 
             HStack(spacing: Theme.Spacing.sm) {
                 streakStatCard(
-                    value: "\(streak.currentStreak)",
+                    value: "\(viewModel.streak?.currentStreak ?? 0)",
                     label: "Current",
                     icon: "flame.fill",
                     color: Theme.Colors.warning
                 )
 
                 streakStatCard(
-                    value: "\(streak.longestStreak)",
+                    value: "\(viewModel.streak?.longestStreak ?? 0)",
                     label: "Longest",
                     icon: "trophy.fill",
                     color: Theme.Dimension.energy
                 )
 
                 streakStatCard(
-                    value: "\(streak.totalCheckIns)",
+                    value: "\(viewModel.streak?.totalCheckIns ?? 0)",
                     label: "Total",
                     icon: "checkmark.circle.fill",
                     color: Theme.Colors.success
@@ -322,6 +416,74 @@ struct InsightsView: View {
         .accessibilityLabel("\(label): \(value)")
     }
 
+    // MARK: - Review Actions
+
+    private var reviewActionsSection: some View {
+        VStack(spacing: Theme.Spacing.md) {
+            if let onShowWeeklyReview {
+                Button(action: onShowWeeklyReview) {
+                    HStack(spacing: Theme.Spacing.md) {
+                        Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                            .font(.title3)
+                            .foregroundStyle(Theme.Dimension.focus)
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            Text("Weekly AI Review")
+                                .font(Theme.Typography.headline)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+
+                            Text("Reflect on your week with AI coaching")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
+                    .padding(Theme.Spacing.md)
+                    .background(Theme.Colors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Start Weekly AI Review")
+            }
+
+            if let onShowMonthlyReport {
+                Button(action: onShowMonthlyReport) {
+                    HStack(spacing: Theme.Spacing.md) {
+                        Image(systemName: "doc.text.fill")
+                            .font(.title3)
+                            .foregroundStyle(Theme.Dimension.growth)
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            Text("Monthly Report")
+                                .font(Theme.Typography.headline)
+                                .foregroundStyle(Theme.Colors.textPrimary)
+
+                            Text("View your AI-generated growth report")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
+                    .padding(Theme.Spacing.md)
+                    .background(Theme.Colors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("View Monthly Report")
+            }
+        }
+    }
+
     // MARK: - Helpers
 
     private func sectionHeader(title: String, icon: String) -> some View {
@@ -345,5 +507,7 @@ struct InsightsView: View {
 
 #Preview {
     InsightsView()
+        .modelContainer(MockData.previewContainer)
+        .environment(AppContainer(modelContainer: MockData.previewContainer))
         .preferredColorScheme(.dark)
 }

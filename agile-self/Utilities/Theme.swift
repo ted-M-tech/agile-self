@@ -43,6 +43,13 @@ enum Theme {
         static let success = Color(hex: 0x00B894)
         static let warning = Color(hex: 0xE17055)
         static let error = Color(hex: 0xFF6B6B)
+
+        // Health Metric colors
+        static let sleep = Color(hex: 0x6C5CE7)
+        static let steps = Color(hex: 0xE17055)
+        static let heartRate = Color(hex: 0xFF6B6B)
+        static let screenTime = Color(hex: 0x00CEC9)
+        static let running = Color(hex: 0x00B894)
     }
 
     // MARK: - Dimension Colors (4-axis scoring)

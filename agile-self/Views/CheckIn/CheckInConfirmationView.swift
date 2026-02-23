@@ -16,6 +16,7 @@ struct CheckInConfirmationView: View {
     let growthScore: Int
     let elapsedSeconds: Int
     let previousComposite: Double?
+    var insight: String?
     let onDismiss: () -> Void
 
     @State private var showCheckmark = false
@@ -183,7 +184,7 @@ struct CheckInConfirmationView: View {
                 .font(.body)
                 .foregroundStyle(Theme.Colors.accentStart)
 
-            Text("Great energy today! Your scores are trending up.")
+            Text(insight ?? "Check-in saved successfully!")
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.leading)

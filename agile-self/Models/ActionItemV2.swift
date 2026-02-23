@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 import SwiftData
 
 // MARK: - Supporting Types (must be top-level, not nested inside @Model)
@@ -18,6 +19,51 @@ enum ActionSource: String, Codable, CaseIterable {
     case manual
     /// Suggested by on-device AI analysis.
     case aiSuggested
+}
+
+/// Priority level for an action item.
+enum ActionPriority: String, Codable, CaseIterable, Sendable {
+    case high
+    case medium
+    case low
+
+    var displayName: String {
+        switch self {
+        case .high: return "High"
+        case .medium: return "Medium"
+        case .low: return "Low"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .high: return "exclamationmark.3"
+        case .medium: return "exclamationmark.2"
+        case .low: return "exclamationmark"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .high: return Theme.Colors.error
+        case .medium: return Theme.Colors.warning
+        case .low: return Theme.Colors.textSecondary
+        }
+    }
+
+    var sortOrder: Int {
+        switch self {
+        case .high: return 0
+        case .medium: return 1
+        case .low: return 2
+        }
+    }
+}
+
+extension ActionPriority: Comparable {
+    static func < (lhs: ActionPriority, rhs: ActionPriority) -> Bool {
+        lhs.sortOrder < rhs.sortOrder
+    }
 }
 
 // MARK: - ActionItemV2 Model

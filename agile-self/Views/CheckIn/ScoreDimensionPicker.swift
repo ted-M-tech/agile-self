@@ -20,6 +20,7 @@ struct ScoreDimensionPicker: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             header
             scoreRow
+            scaleLabels
         }
         .padding(Theme.Spacing.md)
         .background(
@@ -117,6 +118,49 @@ struct ScoreDimensionPicker: View {
             .onTapGesture {
                 updateScore(value)
             }
+    }
+
+    // MARK: - Scale Labels
+
+    private var scaleLabels: some View {
+        HStack {
+            Text(dimension.isInverted ? "Calm" : "Low")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            Spacer()
+
+            Text(scoreDescriptor)
+                .font(Theme.Typography.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(Theme.Dimension.color(for: dimension))
+                .contentTransition(.numericText())
+
+            Spacer()
+
+            Text(dimension.isInverted ? "Very High" : "Great")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textTertiary)
+        }
+    }
+
+    private var scoreDescriptor: String {
+        if dimension.isInverted {
+            // Stress: 1-3 = calm, 4-5 = mild, 6-7 = stressed, 8-10 = very stressed
+            switch score {
+            case 1...3: return "Calm"
+            case 4...5: return "Mild"
+            case 6...7: return "Stressed"
+            default: return "Very Stressed"
+            }
+        } else {
+            switch score {
+            case 1...3: return "Low"
+            case 4...5: return "Moderate"
+            case 6...7: return "Good"
+            default: return "Great"
+            }
+        }
     }
 
     // MARK: - Actions

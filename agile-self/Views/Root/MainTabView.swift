@@ -38,6 +38,8 @@ struct MainTabView: View {
     @State private var selectedTab: AppTab = .home
     @State private var showSettings = false
     @State private var showCheckIn = false
+    @State private var showWeeklyReview = false
+    @State private var showMonthlyReport = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -49,7 +51,10 @@ struct MainTabView: View {
             }
 
             Tab(AppTab.insights.title, systemImage: AppTab.insights.icon, value: .insights) {
-                InsightsView()
+                InsightsView(
+                    onShowWeeklyReview: { showWeeklyReview = true },
+                    onShowMonthlyReport: { showMonthlyReport = true }
+                )
             }
 
             Tab(AppTab.profile.title, systemImage: AppTab.profile.icon, value: .profile) {
@@ -61,26 +66,56 @@ struct MainTabView: View {
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarColorScheme(.dark, for: .tabBar)
         .sheet(isPresented: $showSettings) {
-            SettingsPlaceholderView()
+            SettingsView()
         }
         .fullScreenCover(isPresented: $showCheckIn) {
             DailyCheckInView()
         }
+        .sheet(isPresented: $showWeeklyReview) {
+            WeeklyReviewFlowView()
+        }
+        .sheet(isPresented: $showMonthlyReport) {
+            NavigationStack {
+                MonthlyReportView(onDismiss: { showMonthlyReport = false })
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { showMonthlyReport = false }
+                                .foregroundStyle(Theme.Colors.accentStart)
+                        }
+                    }
+            }
+            .preferredColorScheme(.dark)
+        }
     }
 }
 
-// MARK: - Settings Placeholder
+// MARK: - Weekly Review Flow
 
-private struct SettingsPlaceholderView: View {
+/// Manages the multi-screen weekly review flow.
+private struct WeeklyReviewFlowView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var phase: ReviewPhase = .intro
+
+    enum ReviewPhase {
+        case intro, conversation, summary
+    }
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Theme.Colors.backgroundPrimary.ignoresSafeArea()
-                Text("Settings Coming Soon")
-                    .font(Theme.Typography.title2)
-                    .foregroundStyle(Theme.Colors.textSecondary)
+            Group {
+                switch phase {
+                case .intro:
+                    WeeklyReviewIntroView(
+                        onStartReview: { phase = .conversation },
+                        onSkip: { phase = .summary }
+                    )
+                case .conversation:
+                    WeeklyConversationView(
+                        onComplete: { phase = .summary }
+                    )
+                case .summary:
+                    WeeklySummaryView(onDismiss: { dismiss() })
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -98,5 +133,6 @@ private struct SettingsPlaceholderView: View {
 #Preview {
     MainTabView()
         .modelContainer(MockData.previewContainer)
+        .environment(AppContainer(modelContainer: MockData.previewContainer))
         .preferredColorScheme(.dark)
 }

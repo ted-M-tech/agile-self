@@ -11,7 +11,8 @@ import SwiftData
 // MARK: - RootView
 
 struct RootView: View {
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         ZStack {
@@ -21,47 +22,33 @@ struct RootView: View {
             if hasCompletedOnboarding {
                 MainTabView()
             } else {
-                OnboardingPlaceholderView {
-                    hasCompletedOnboarding = true
+                OnboardingContainerView {
+                    withAnimation(Theme.Animation.smooth) {
+                        hasCompletedOnboarding = true
+                    }
                 }
             }
         }
         .preferredColorScheme(.dark)
+        .task {
+            ensureDefaultRecords()
+        }
     }
-}
 
-// MARK: - OnboardingPlaceholderView
+    // MARK: - First Launch Setup
 
-/// Temporary placeholder until the real onboarding flow is built.
-private struct OnboardingPlaceholderView: View {
-    var onSkip: () -> Void
+    /// Creates a default UserProfile and Streak if none exist yet.
+    private func ensureDefaultRecords() {
+        let profileDescriptor = FetchDescriptor<UserProfile>()
+        if (try? modelContext.fetch(profileDescriptor))?.isEmpty ?? true {
+            let profile = UserProfile()
+            modelContext.insert(profile)
+        }
 
-    var body: some View {
-        VStack(spacing: Theme.Spacing.lg) {
-            Spacer()
-
-            Image(systemName: "sparkles")
-                .font(.system(size: 56))
-                .foregroundStyle(Theme.Colors.accentGradient)
-
-            Text("Onboarding Coming Soon")
-                .font(Theme.Typography.title1)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            Text("Set up your profile, connect Health, and personalize your experience.")
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Theme.Spacing.xl)
-
-            Spacer()
-
-            Button(action: onSkip) {
-                Text("Skip for Now")
-            }
-            .primaryButtonStyle()
-            .padding(.horizontal, Theme.Spacing.lg)
-            .padding(.bottom, Theme.Spacing.xl)
+        let streakDescriptor = FetchDescriptor<Streak>()
+        if (try? modelContext.fetch(streakDescriptor))?.isEmpty ?? true {
+            let streak = Streak()
+            modelContext.insert(streak)
         }
     }
 }
@@ -71,11 +58,13 @@ private struct OnboardingPlaceholderView: View {
 #Preview("Main App") {
     RootView()
         .modelContainer(MockData.previewContainer)
+        .environment(AppContainer(modelContainer: MockData.previewContainer))
 }
 
 #Preview("Onboarding") {
     RootView()
         .modelContainer(MockData.previewContainer)
+        .environment(AppContainer(modelContainer: MockData.previewContainer))
         .onAppear {
             UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
         }

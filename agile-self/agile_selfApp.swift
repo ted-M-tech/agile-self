@@ -11,6 +11,7 @@ import SwiftData
 @main
 struct agile_selfApp: App {
     private let sharedModelContainer: ModelContainer?
+    private let appContainer: AppContainer?
 
     init() {
         let schema = Schema([
@@ -30,21 +31,25 @@ struct agile_selfApp: App {
         )
 
         do {
-            self.sharedModelContainer = try ModelContainer(
+            let container = try ModelContainer(
                 for: schema,
                 configurations: [modelConfiguration]
             )
+            self.sharedModelContainer = container
+            self.appContainer = AppContainer(modelContainer: container)
         } catch {
             self.sharedModelContainer = nil
+            self.appContainer = nil
             print("Could not create ModelContainer: \(error)")
         }
     }
 
     var body: some Scene {
         WindowGroup {
-            if let container = sharedModelContainer {
+            if let container = sharedModelContainer, let appContainer {
                 RootView()
                     .modelContainer(container)
+                    .environment(appContainer)
             } else {
                 DatabaseErrorView()
             }
@@ -74,15 +79,11 @@ struct DatabaseErrorView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, Theme.Spacing.xl)
 
-                Button {
-                    #if os(iOS)
-                    exit(0)
-                    #endif
-                } label: {
-                    Text("Restart App")
-                        .primaryButtonStyle()
-                }
-                .padding(.horizontal, Theme.Spacing.xl)
+                Text("Please close and reopen the app to try again.")
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Theme.Spacing.xl)
             }
             .padding()
         }

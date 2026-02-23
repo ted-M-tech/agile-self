@@ -40,6 +40,8 @@ final class UserProfile {
     var subscriptionTier: SubscriptionTier
     /// Whether the user has opted in to cloud-based AI processing.
     var allowCloudAI: Bool
+    /// Whether the user has enabled push notifications for reminders.
+    var notificationsEnabled: Bool
     /// Whether the user has completed the onboarding flow.
     var hasCompletedOnboarding: Bool
     var createdAt: Date
@@ -54,6 +56,7 @@ final class UserProfile {
         weeklyReviewDay: Int = 6,
         subscriptionTier: SubscriptionTier = .free,
         allowCloudAI: Bool = false,
+        notificationsEnabled: Bool = true,
         hasCompletedOnboarding: Bool = false,
         createdAt: Date = Date()
     ) {
@@ -64,6 +67,7 @@ final class UserProfile {
         self.weeklyReviewDay = weeklyReviewDay
         self.subscriptionTier = subscriptionTier
         self.allowCloudAI = allowCloudAI
+        self.notificationsEnabled = notificationsEnabled
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.createdAt = createdAt
     }
