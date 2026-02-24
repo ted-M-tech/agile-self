@@ -11,7 +11,7 @@ import SwiftData
 // MARK: - Supporting Types (must be top-level, not nested inside @Model)
 
 /// A correlation between two tracked factors discovered by on-device AI analysis.
-struct Correlation: Codable, Identifiable {
+nonisolated struct Correlation: Codable, Identifiable, Sendable {
     var id: UUID
     /// First factor name (e.g. "Sleep").
     var factor1: String

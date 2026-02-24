@@ -294,7 +294,7 @@ struct DailyCheckInView: View {
 
         // Generate AI insight asynchronously
         Task {
-            if let insight = try? await appContainer.aiService.generateDailyInsight(checkIn: checkIn) {
+            if let insight = await appContainer.aiService.generateDailyInsight(checkIn: checkIn) {
                 checkIn.dailyInsight = insight
                 generatedInsight = insight
             }
