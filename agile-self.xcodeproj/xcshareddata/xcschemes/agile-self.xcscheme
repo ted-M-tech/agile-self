@@ -29,6 +29,30 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
+      <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A71FBFF62EDCF67F00467EF7"
+               BuildableName = "agile-selfTests.xctest"
+               BlueprintName = "agile-selfTests"
+               ReferencedContainer = "container:agile-self.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A71FC0002EDCF67F00467EF7"
+               BuildableName = "agile-selfUITests.xctest"
+               BlueprintName = "agile-selfUITests"
+               ReferencedContainer = "container:agile-self.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

@@ -36,7 +36,9 @@ struct agile_selfApp: App {
                 configurations: [modelConfiguration]
             )
             self.sharedModelContainer = container
-            self.appContainer = AppContainer(modelContainer: container)
+            let app = AppContainer(modelContainer: container)
+            self.appContainer = app
+            app.watchConnectivityService.activate()
         } catch {
             self.sharedModelContainer = nil
             self.appContainer = nil

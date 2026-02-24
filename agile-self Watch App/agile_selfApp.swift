@@ -9,9 +9,17 @@ import SwiftUI
 
 @main
 struct agile_self_Watch_AppApp: App {
+    @State private var connectivity = WatchConnectivityManager()
+
+    init() {
+        let manager = WatchConnectivityManager()
+        _connectivity = State(initialValue: manager)
+        manager.activate()
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(connectivity: connectivity)
         }
     }
 }

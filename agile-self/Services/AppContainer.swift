@@ -81,4 +81,12 @@ final class AppContainer {
         _screenTimeService = service
         return service
     }
+
+    private var _watchConnectivityService: WatchConnectivityService?
+    var watchConnectivityService: WatchConnectivityService {
+        if let existing = _watchConnectivityService { return existing }
+        let service = WatchConnectivityService(modelContainer: modelContainer)
+        _watchConnectivityService = service
+        return service
+    }
 }
