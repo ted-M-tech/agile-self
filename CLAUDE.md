@@ -1,179 +1,156 @@
-# CLAUDE.md
+# CLAUDE.md — Agile Self iOS App
 
-This file provides guidance to Claude Code when working with this repository.
-
-## Build Commands
+## Build & Test
 
 ```bash
-# Build iOS app
+# Build iOS
 xcodebuild -scheme agile-self -destination 'platform=iOS Simulator,name=iPhone 16' build
-
-# Run unit tests (iOS)
+# Unit tests
 xcodebuild test -scheme agile-self -destination 'platform=iOS Simulator,name=iPhone 16'
-
-# Run UI tests
-xcodebuild test -scheme agile-self -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:agile-selfUITests
+# Watch app
+xcodebuild -scheme "agile-self Watch App" -destination 'platform=watchOS Simulator,name=Apple Watch Series 10 (46mm)' build
 ```
 
-Alternatively, open `agile-self.xcodeproj` in Xcode and use Cmd+B to build, Cmd+U to run tests.
+## Do NOT
 
-## Project Overview
-
-**Agile Self** is a native iOS application for personal self-retrospection with AI-powered growth insights, integrated with Apple Health and Screen Time data.
-
-- Tagline: "Your AI Growth Partner"
-- Motto: "Turn Reflection Into Action"
-- Platform: iOS 18.1+
-- Full specification: See SPEC.md
-
-## Tech Stack
-
-| Component | Technology |
-|-----------|------------|
-| Language | Swift 6.0+ |
-| UI | SwiftUI (iOS 18.1+) |
-| Data | SwiftData + CloudKit |
-| Health | HealthKit |
-| Screen Time | DeviceActivity / FamilyControls |
-| Charts | Swift Charts |
-| AI (on-device) | NaturalLanguage + Foundation Models |
-| AI (cloud) | Gemini 2.0 Flash API |
-| Subscription | StoreKit 2 |
-| Widget | WidgetKit |
-| Min iOS | **18.1** |
+- Nest types inside `@Model` classes (SwiftData runtime crash)
+- Use `ObservableObject` / `@Published` — use `@Observable`
+- Use `NavigationView` — use `NavigationStack`
+- Use `DispatchQueue` — use Swift Concurrency (`async/await`, `.task {}`)
+- Use `Task {}` in `onAppear` — use `.task {}` modifier
+- Use force unwrapping (`!`) in production code
+- Use `@unchecked Sendable` — fix the actual isolation issue
+- Use `exit(0)` — Apple rejects this
+- Edit `.pbxproj` files — add files via Xcode manually
+- Store raw HealthKit data in iCloud
+- Pass `@Model` objects across actor boundaries — pass `PersistentIdentifier`
 
 ## Project Structure
 
 ```
 agile-self/
-├── agile_selfApp.swift              # App entry point (RootView + ModelContainer)
-├── Models/
-│   ├── DailyCheckIn.swift           # 4-axis daily scoring (1-10)
-│   ├── HealthSnapshot.swift         # Daily health metrics from HealthKit
-│   ├── WeeklyReview.swift           # AI conversation review + ConversationMessage
-│   ├── MonthlyReport.swift          # Auto-generated report + Correlation
-│   ├── ActionItemV2.swift           # Action items + ActionSource enum
-│   ├── ActionPriority.swift         # Priority enum (high/medium/low)
-│   ├── UserProfile.swift            # User settings + SubscriptionTier
-│   └── Streak.swift                 # Check-in streak tracking
+├── agile_selfApp.swift                    # Entry point, ModelContainer
+├── Models/                                # SwiftData @Model classes (7 files)
+│   ├── DailyCheckIn.swift                 # 4-axis scoring + compositeScore
+│   ├── HealthSnapshot.swift               # Health metrics + sleepScore
+│   ├── WeeklyReview.swift                 # AI conversation (JSON-encoded messages)
+│   ├── MonthlyReport.swift                # Trends + correlations (JSON-encoded)
+│   ├── ActionItemV2.swift                 # Actions + ActionPriority + ActionSource enums
+│   ├── UserProfile.swift                  # Settings + SubscriptionTier enum
+│   └── Streak.swift                       # Streak tracking
+├── ViewModels/                            # @Observable view models (4 files)
+│   ├── HomeViewModel.swift
+│   ├── CheckInViewModel.swift
+│   ├── InsightsViewModel.swift
+│   └── ProfileViewModel.swift
 ├── Views/
-│   ├── Root/
-│   │   ├── RootView.swift           # Onboarding gate → MainTabView
-│   │   └── MainTabView.swift        # 3-tab: Home / Insights / Profile
-│   ├── Home/
-│   │   ├── HomeView.swift           # Dashboard (greeting, trend, dimensions, health)
-│   │   ├── ScoreTrendChart.swift    # 7-day composite score (Swift Charts)
-│   │   ├── DimensionCard.swift      # Circular ring progress card
-│   │   ├── AIInsightCard.swift      # AI-generated insight display
-│   │   └── HealthMetricCard.swift   # Health data compact card
-│   ├── CheckIn/
-│   │   ├── DailyCheckInView.swift   # Full-screen 4-axis scoring entry
-│   │   ├── ScoreDimensionPicker.swift # Horizontal 1-10 picker
-│   │   └── CheckInConfirmationView.swift # Animated confirmation overlay
-│   ├── Insights/
-│   │   ├── InsightsView.swift       # Trends, correlations, patterns, streaks
-│   │   ├── CorrelationCard.swift    # Health-score correlation display
-│   │   └── PatternCard.swift        # AI-discovered pattern card
-│   └── Profile/
-│       ├── ProfileView.swift        # User info, actions, settings
-│       └── ActionRow.swift          # Reusable action item row
+│   ├── Root/                              # RootView (onboarding gate) + MainTabView (3 tabs)
+│   ├── Home/                              # HomeView, ScoreTrendChart, DimensionCard, AIInsightCard, HealthMetricCard
+│   ├── CheckIn/                           # DailyCheckInView, ScoreDimensionPicker, CheckInConfirmationView
+│   ├── Insights/                          # InsightsView, CorrelationCard, PatternCard
+│   ├── MonthlyReport/                     # MonthlyReportView, HeatmapCalendarView
+│   ├── WeeklyReview/                      # WeeklyReviewIntroView, WeeklyConversationView, WeeklySummaryView, QuickResponseChip
+│   ├── Onboarding/                        # OnboardingContainerView
+│   ├── Profile/                           # ProfileView, ActionRow
+│   ├── Settings/                          # SettingsView
+│   └── Subscription/                      # PaywallView
+├── Services/
+│   ├── AppContainer.swift                 # DI container (lazy service init)
+│   ├── AI/                                # AIServiceProtocol, AIServiceRouter, OnDeviceAIService, GeminiAIService, AIService (legacy)
+│   ├── Analytics/                         # AnalyticsService (Pearson correlation, trends)
+│   ├── HealthKit/                         # HealthKitService (6 data types)
+│   ├── Notifications/                     # NotificationService
+│   ├── ScreenTime/                        # ScreenTimeService (FamilyControls)
+│   ├── Streak/                            # StreakService
+│   ├── Subscription/                      # SubscriptionService (StoreKit 2)
+│   └── WatchConnectivity/                 # WatchConnectivityService
 └── Utilities/
-    ├── Theme.swift                  # Design system (colors, typography, spacing)
-    └── MockData.swift               # Preview mock data
+    ├── Theme.swift                        # Design system + DimensionType enum
+    └── MockData.swift                     # Preview data
 
-ScreenTimeReport/                    # App Extension
-├── ScreenTimeReport.swift
-├── TotalActivityReport.swift
-└── TotalActivityView.swift
+agile-self Watch App/                      # watchOS companion (5 files)
+├── WatchCheckInView.swift, WatchConnectivityManager.swift, WatchTheme.swift
+ScreenTimeReport/                          # DeviceActivity extension (3 files)
+agile-selfTests/                           # Swift Testing framework (2 files)
 ```
 
-## Core Framework: Daily / Weekly / Monthly Hybrid
+## Code Conventions
 
-| Layer | Frequency | Time | Method |
-|-------|-----------|------|--------|
-| Daily | Every day | 15 sec | 4-axis scorecard (Energy/Focus/Stress/Growth, 1-10) |
-| Weekly | Once/week | 3-5 min | AI conversation review (Gemini API) |
-| Monthly | Auto | Auto | AI-generated report with trends & correlations |
+### ViewModel Pattern
+```swift
+@Observable final class XViewModel {
+    var isLoading = false
+    var errorMessage: String?
+    private var healthService: HealthKitService?
 
-### 4 Dimensions
-| Dimension | Color | Score |
-|-----------|-------|-------|
-| Energy | Gold (#FDCB6E) | 1-10 |
-| Focus | Sky Blue (#74B9FF) | 1-10 |
-| Stress | Coral (#FF6B6B) | 1-10 (low=good, inverted for composite) |
-| Growth | Mint (#55EFC4) | 1-10 |
+    func configure(container: AppContainer) { self.healthService = container.healthService }
+    func loadData(context: ModelContext) { /* sync fetch with FetchDescriptor */ }
+    func loadAsync(context: ModelContext) async { /* async work */ }
+}
+// In view: @State private var viewModel = XViewModel()
+// In .task { viewModel.configure(container: appContainer); viewModel.loadData(context: modelContext) }
+```
 
-### Navigation (3 Tabs)
-- **Home** - Dashboard with score trends, dimension cards, AI insights, health data
-- **Insights** - Trend charts, correlations, AI patterns, streak stats
-- **Profile** - User info, action items, settings
+### Service Pattern
+- `@Observable` only when service has view-observable state (e.g., `isAuthorized`)
+- Otherwise plain `final class` (e.g., `StreakService`, `AnalyticsService`)
+- All services injected via `AppContainer`, accessed through `@Environment`
+- Protocol-based for testability: `AIServiceProtocol`
+
+### SwiftData Rules
+- All `@Model` properties must be optional or have defaults (CloudKit compat)
+- Supporting types (enums, structs) defined outside `@Model` class, in same file
+- Use `Data?` + computed property for JSON-encoded arrays
+- `@Attribute(.unique)` on `id: UUID` for all models
+- Use `@Relationship(deleteRule: .cascade)` for parent-child links
+- Test with `ModelConfiguration(isStoredInMemoryOnly: true)`
+
+### Error Handling Policy
+- `do/catch` with `errorMessage` state for primary data loads (user sees error)
+- `try?` only for non-critical auxiliary data (health metrics, AI insights)
+- Never silently swallow errors on core data operations
+
+### Concurrency
+- `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` (all code is MainActor by default)
+- Mark `nonisolated` on methods that don't touch `@Observable` state
+- Use `.task {}` in views, never `Task {}` in `onAppear`
+- Use `async let` for parallel independent fetches
+
+### Naming
+- Models: `DailyCheckIn`, `HealthSnapshot` (noun, PascalCase)
+- ViewModels: `HomeViewModel`, `CheckInViewModel` (ScreenName + ViewModel)
+- Services: `HealthKitService`, `AnalyticsService` (Framework + Service)
+- Views: `HomeView`, `DailyCheckInView` (descriptive + View)
 
 ## Design System (Theme.swift)
 
 ### Colors
-- Background: Primary (#0A0A0F), Secondary (#13131A), Tertiary (#1C1C26)
-- Accent gradient: #6C5CE7 → #A29BFE (purple)
-- Text: Primary (#F0F0F5), Secondary (#8888A0), Tertiary (#55556A)
-- Semantic: Success (#00B894), Warning (#E17055), Error (#FF6B6B)
+- Background: `#0A0A0F` / `#13131A` / `#1C1C26` | Accent: `#6C5CE7 → #A29BFE`
+- Dimensions: Energy `#FDCB6E` | Focus `#74B9FF` | Stress `#FF6B6B` | Growth `#55EFC4`
 
-### Typography
-- Display/Titles: SF Pro Rounded (bold/semibold)
-- Body/UI: SF Pro Text (regular)
-- Scores: Rounded monospaced variants
+### View Modifiers
+`.cardStyle()` `.elevatedCardStyle()` `.primaryButtonStyle()` `.secondaryButtonStyle()` `.ghostButtonStyle()` `.pillStyle(color:)` `.colorBorderCard(_:)` `.dimensionBorderCard(_:)` `.gradientText()`
 
-### Key View Modifiers
-- `.cardStyle()` - Secondary background card
-- `.elevatedCardStyle()` - Tertiary background card
-- `.primaryButtonStyle()` - Accent gradient CTA
-- `.secondaryButtonStyle()` - Outline button
-- `.pillStyle(color:)` - Small tag/badge
-- `.colorBorderCard(_:)` - Card with colored left border
-- `.gradientText()` - Accent gradient text overlay
-
-## Development Guidelines
-
-### SwiftUI
-- Use NavigationStack, not NavigationView
-- Dark mode only (preferredColorScheme(.dark))
-- Use Theme.* constants for all colors, typography, spacing
-- Support Dynamic Type
+### Rules
+- Dark mode only (`preferredColorScheme(.dark)`)
+- Use `Theme.*` constants for all colors, typography, spacing
 - Use SF Symbols for all icons
-- All views must have #Preview blocks with MockData
-
-### SwiftData
-- Use @Model for persistent types
-- Do NOT nest types inside @Model classes
-- Use Data? + computed properties for JSON-encoded arrays
-- Simple [String] arrays work directly
-
-### Architecture
-- Unidirectional: Views → ViewModels → Services → SwiftData
-- AppContainer for dependency injection (replacing singletons)
-- DimensionType enum defined in Theme.swift (shared across models/views)
-
-### Concurrency
-- Project uses SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
-- Mark nonisolated properties that don't need MainActor
-
-### Privacy
-- Local-first data storage
-- Cloud AI data is anonymized before sending
-- User consent required for cloud AI (allowCloudAI flag)
-
-## Xcode Capabilities Required
-
-### iOS Target (agile-self)
-- HealthKit
-- iCloud (CloudKit)
-- Family Controls
-- Push Notifications
-- App Groups
-
-### ScreenTimeReport Extension
-- Family Controls
+- All views must have `#Preview` blocks with `MockData.previewContainer`
+- Views over 200 lines should be decomposed into subviews
+- Support Dynamic Type — use semantic font sizes, not fixed `Font.system(size:)`
+- Support VoiceOver — meaningful `accessibilityLabel` on all interactive elements
+- Respect `accessibilityReduceMotion`
 
 ## Testing
+- Use **Swift Testing** framework (`@Test`, `#expect`, `#require`), not XCTest
+- In-memory container: `ModelConfiguration(isStoredInMemoryOnly: true)`
+- Parameterized tests for score/dimension validation
+- Unit tests in `agile-selfTests/`, UI tests in `agile-selfUITests/`
 
-- Unit tests in `agile-selfTests/`
-- UI tests in `agile-selfUITests/`
-- Use MockData.previewContainer for in-memory SwiftData previews
+## Current MVP Status (2026-04)
+- Phase: MVP (TestFlight target: May 2026)
+- Gemini API: deferred (on-device AI only)
+- CloudKit: `.none` for MVP
+- Screen Time: deferred (HealthKit only)
+- Full spec: See SPEC.md
+- Issues: See GitHub Issues (ted-M-tech/agile-self)
