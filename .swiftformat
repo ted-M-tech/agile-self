@@ -1,0 +1,20 @@
+# .swiftformat — Agile Self
+--swiftversion 6.0
+--indent 4
+--indentcase false
+--trimwhitespace always
+--voidtype void
+--maxwidth 120
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen same-line
+--commas inline
+--stripunusedargs closure-only
+--self remove
+--importgrouping alpha
+--enable isEmpty
+--enable sortImports
+--disable wrapMultilineStatementBraces
+--disable redundantType
+--exclude DerivedData,.build,Packages
