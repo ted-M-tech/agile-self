@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 // MARK: - CheckInConfirmationView
 
@@ -25,6 +26,17 @@ struct CheckInConfirmationView: View {
     @State private var showContent = false
     @State private var particles: [Particle] = []
     @State private var autoDismissTask: Task<Void, Never>?
+
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+
+    /// One spoken sentence summarizing the result for VoiceOver.
+    private var accessibilitySummary: String {
+        var parts = ["\(compositeWord), \(String(format: "%.1f", compositeScore)) out of 5, logged."]
+        if let delta, abs(delta) >= 0.1 {
+            parts.append(String(format: "%@ %.1f versus your last check-in.", delta >= 0 ? "Up" : "Down", abs(delta)))
+        }
+        return parts.joined(separator: " ")
+    }
 
     private var compositeScore: Double {
         // Plain average of all four dimensions (each 1-5, higher = better). The 4th axis
@@ -101,11 +113,20 @@ struct CheckInConfirmationView: View {
             }
             .padding(.horizontal, Theme.Spacing.lg)
         }
+        .accessibilityAction(.escape) {
+            autoDismissTask?.cancel()
+            onDismiss()
+        }
         .onAppear {
             startAnimations()
-            // If the insight is already present (rare — generation is async), give the
-            // user a moment to read it; otherwise arm the hard cap until it arrives.
-            if insight != nil {
+            if voiceOverEnabled {
+                // VoiceOver: announce the result and do NOT auto-dismiss — a self-dismissing
+                // overlay would vanish before it's read. The user dismisses via the escape
+                // gesture (or the background tap).
+                UIAccessibility.post(notification: .announcement, argument: accessibilitySummary)
+            } else if insight != nil {
+                // If the insight is already present (rare — generation is async), give the
+                // user a moment to read it; otherwise arm the hard cap until it arrives.
                 scheduleAutoDismiss(after: .seconds(4))
             } else {
                 scheduleAutoDismiss(after: .seconds(8))
@@ -114,7 +135,8 @@ struct CheckInConfirmationView: View {
         .onChange(of: insight) { _, newValue in
             // The async insight just landed — reset the timer to a short linger so the
             // user actually sees it (kept well under the hard cap and the UI-test budget).
-            guard newValue != nil else { return }
+            // Skipped under VoiceOver (no auto-dismiss there).
+            guard newValue != nil, !voiceOverEnabled else { return }
             scheduleAutoDismiss(after: .seconds(4))
         }
         .onDisappear {
@@ -261,18 +283,19 @@ struct CheckInConfirmationView: View {
     }
 
     private func startAnimations() {
-        // Checkmark draw
-        withAnimation(Theme.Animation.checkmarkDraw.delay(0.1)) {
+        // Checkmark draw + content fade — instant under Reduce Motion (state still applies).
+        withMotionAnimation(Theme.Animation.checkmarkDraw.delay(0.1)) {
             showCheckmark = true
         }
-
-        // Content fade in
-        withAnimation(Theme.Animation.smooth.delay(0.5)) {
+        withMotionAnimation(Theme.Animation.smooth.delay(0.5)) {
             showContent = true
         }
 
-        // Particle burst
-        spawnParticles()
+        // Decorative particle burst — skipped entirely under Reduce Motion (would otherwise
+        // leave static dots, since the outward animation is what clears them).
+        if !UIAccessibility.isReduceMotionEnabled {
+            spawnParticles()
+        }
     }
 
     private func spawnParticles() {

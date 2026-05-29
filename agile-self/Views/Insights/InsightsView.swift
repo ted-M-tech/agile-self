@@ -57,7 +57,6 @@ struct InsightsView: View {
 
     @State private var selectedPeriod: TimePeriod = .week
     @State private var activeDimensions: Set<DimensionType> = []
-    @State private var animateChart = false
 
     /// Check-ins filtered by the selected time period.
     private var filteredCheckIns: [DailyCheckIn] {
@@ -69,7 +68,9 @@ struct InsightsView: View {
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
                     if let error = viewModel.errorMessage {
-                        insightsErrorView(message: error)
+                        ErrorStateView(message: error) {
+                            viewModel.loadData(context: modelContext)
+                        }
                     } else if viewModel.isLoading {
                         insightsLoadingView
                     } else if viewModel.allCheckIns.isEmpty {
@@ -88,11 +89,6 @@ struct InsightsView: View {
             .background(Theme.Colors.backgroundPrimary.ignoresSafeArea())
             .navigationTitle("Insights")
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .onAppear {
-                withAnimation(Theme.Animation.trendLineDraw) {
-                    animateChart = true
-                }
-            }
             .task {
                 viewModel.configure(
                     aiService: appContainer.aiService,
@@ -121,35 +117,6 @@ struct InsightsView: View {
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textTertiary)
             Spacer(minLength: 100)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - Error State
-
-    private func insightsErrorView(message: String) -> some View {
-        VStack(spacing: Theme.Spacing.md) {
-            Spacer(minLength: 80)
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 40))
-                .foregroundStyle(Theme.Colors.warning)
-
-            Text("Something went wrong")
-                .font(Theme.Typography.headline)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            Text(message)
-                .font(Theme.Typography.callout)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-
-            Button {
-                viewModel.loadData(context: modelContext)
-            } label: {
-                Text("Try Again")
-                    .secondaryButtonStyle()
-            }
-            Spacer(minLength: 80)
         }
         .frame(maxWidth: .infinity)
     }
@@ -215,12 +182,25 @@ struct InsightsView: View {
     /// Dates actually being plotted, for pinning the x-domain / stride.
     private var chartDates: [Date] { filteredCheckIns.map(\.date) }
 
+    /// Spoken summary of the trend for VoiceOver (the chart marks themselves aren't readable).
+    private var chartAccessibilitySummary: String {
+        let scores = filteredCheckIns.map(\.compositeScore)
+        guard let latest = scores.last, let lo = scores.min(), let hi = scores.max() else {
+            return "No data yet."
+        }
+        return String(
+            format: "Latest %.1f out of 5 across %d check-ins, ranging %.1f to %.1f.",
+            latest, filteredCheckIns.count, lo, hi
+        )
+    }
+
     private var scoreChart: some View {
         Chart {
             ForEach(filteredCheckIns, id: \.id) { checkIn in
-                if animateChart {
-                    // Area fill under composite line
-                    AreaMark(
+                // Marks are drawn unconditionally (no entrance-animation gate) so the chart is
+                // never blank for Reduce Motion / VoiceOver users or on a view reuse.
+                // Area fill under composite line
+                AreaMark(
                         x: .value("Day", checkIn.date, unit: .day),
                         y: .value("Score", checkIn.compositeScore)
                     )
@@ -264,7 +244,6 @@ struct InsightsView: View {
                         .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [5, 3]))
                         .interpolationMethod(.catmullRom)
                     }
-                }
             }
         }
         .chartXScale(domain: ChartAxis.dateDomain(for: chartDates))
@@ -294,6 +273,9 @@ struct InsightsView: View {
         }
         .chartYScale(domain: 1...5)
         .frame(height: 200)
+        .accessibilityElement()
+        .accessibilityLabel("Composite score trend")
+        .accessibilityValue(chartAccessibilitySummary)
     }
 
     /// 0–1 points: a line/area is invisible. Show the single point (if any) on a
@@ -401,6 +383,9 @@ struct InsightsView: View {
             }
         }
         .buttonStyle(.plain)
+        // Expand the hit target to the 44pt minimum without enlarging the visible dot+label.
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
         .disabled(!isToggleable)
         .accessibilityLabel("\(label) dimension")
         .accessibilityAddTraits(isToggleable ? .isButton : .isStaticText)
@@ -566,6 +551,7 @@ struct InsightsView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .tracking(1.2)
+                .accessibilityAddTraits(.isHeader)
 
             Spacer()
         }

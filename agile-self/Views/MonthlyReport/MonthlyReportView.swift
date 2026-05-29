@@ -19,7 +19,6 @@ struct MonthlyReportView: View {
 
     @State private var viewModel = MonthlyReportViewModel()
     @State private var animateRing = false
-    @State private var animateChart = false
 
     private var report: MonthlyReport? { viewModel.report }
     private var checkIns: [DailyCheckIn] { viewModel.monthCheckIns }
@@ -39,7 +38,9 @@ struct MonthlyReportView: View {
                     // re-load failure never blows away an already-generated report.
                     reportContent
                 } else if let error = viewModel.errorMessage {
-                    errorState(error)
+                    ErrorStateView(message: error) {
+                        Task { await viewModel.loadData(context: modelContext) }
+                    }
                 } else if viewModel.needsMoreCheckIns {
                     needsMoreDataState
                 } else {
@@ -55,11 +56,8 @@ struct MonthlyReportView: View {
             await viewModel.loadData(context: modelContext)
         }
         .onAppear {
-            withAnimation(Theme.Animation.ringFill) {
+            withMotionAnimation(Theme.Animation.ringFill) {
                 animateRing = true
-            }
-            withAnimation(Theme.Animation.trendLineDraw) {
-                animateChart = true
             }
         }
     }
@@ -128,35 +126,6 @@ struct MonthlyReportView: View {
             return "Check in daily — your monthly report appears here once you've logged \(required) days."
         }
         return "Log \(remaining) more check-in\(remaining == 1 ? "" : "s") this month to unlock your AI-generated report with trends and patterns."
-    }
-
-    private func errorState(_ message: String) -> some View {
-        VStack(spacing: Theme.Spacing.md) {
-            Spacer()
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 40))
-                .foregroundStyle(Theme.Colors.warning)
-
-            Text("Something went wrong")
-                .font(Theme.Typography.headline)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            Text(message)
-                .font(Theme.Typography.callout)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Theme.Spacing.xl)
-
-            Button {
-                Task { await viewModel.loadData(context: modelContext) }
-            } label: {
-                Text("Try Again")
-                    .secondaryButtonStyle()
-            }
-            .padding(.top, Theme.Spacing.sm)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// Reached when there are enough check-ins (≥ threshold) but the report still isn't
@@ -331,12 +300,23 @@ struct MonthlyReportView: View {
         return lower ... end
     }
 
+    /// Spoken summary of the 30-day trend chart for VoiceOver.
+    private var monthlyChartAccessibilitySummary: String {
+        guard !checkIns.isEmpty else { return "No data yet." }
+        let composites = checkIns.map(\.compositeScore)
+        let avg = composites.reduce(0, +) / Double(composites.count)
+        return String(
+            format: "%d check-ins this month, averaging %.1f out of 5.",
+            checkIns.count, avg
+        )
+    }
+
     private var trendChartSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(title: "30-DAY TRENDS", icon: "chart.xyaxis.line")
 
-            if animateChart {
-                Chart {
+            // Drawn unconditionally (no entrance-animation gate) so it never renders blank.
+            Chart {
                     ForEach(checkIns, id: \.id) { checkIn in
                         ForEach(DimensionType.allCases) { dimension in
                             LineMark(
@@ -385,7 +365,9 @@ struct MonthlyReportView: View {
                 }
                 .chartYScale(domain: 1...5)
                 .frame(height: 200)
-            }
+                .accessibilityElement()
+                .accessibilityLabel("30-day dimension trends")
+                .accessibilityValue(monthlyChartAccessibilitySummary)
 
             // Dimension legend
             dimensionLegend
@@ -518,6 +500,7 @@ struct MonthlyReportView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .tracking(1.2)
+                .accessibilityAddTraits(.isHeader)
 
             Spacer()
         }

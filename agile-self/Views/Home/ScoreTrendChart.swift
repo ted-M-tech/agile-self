@@ -11,8 +11,6 @@ import Charts
 struct ScoreTrendChart: View {
     let checkIns: [DailyCheckIn]
 
-    @State private var animateChart = false
-
     private var todayScore: Double? {
         checkIns.last?.compositeScore
     }
@@ -36,11 +34,6 @@ struct ScoreTrendChart: View {
             }
         }
         .cardStyle()
-        .onAppear {
-            withAnimation(Theme.Animation.trendLineDraw) {
-                animateChart = true
-            }
-        }
     }
 
     // MARK: - Header
@@ -52,6 +45,7 @@ struct ScoreTrendChart: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .tracking(1.2)
+                .accessibilityAddTraits(.isHeader)
 
             Spacer()
 
@@ -98,45 +92,45 @@ struct ScoreTrendChart: View {
     private var dates: [Date] { checkIns.map(\.date) }
 
     private var chart: some View {
+        // Marks are drawn unconditionally (no entrance-animation gate) so the trend is never
+        // blank for Reduce Motion / VoiceOver users.
         Chart(checkIns, id: \.id) { checkIn in
-            if animateChart {
-                AreaMark(
-                    x: .value("Day", checkIn.date, unit: .day),
-                    y: .value("Score", checkIn.compositeScore)
+            AreaMark(
+                x: .value("Day", checkIn.date, unit: .day),
+                y: .value("Score", checkIn.compositeScore)
+            )
+            .foregroundStyle(
+                LinearGradient(
+                    colors: [
+                        Theme.Colors.accentStart.opacity(0.3),
+                        Theme.Colors.accentStart.opacity(0.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
                 )
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [
-                            Theme.Colors.accentStart.opacity(0.3),
-                            Theme.Colors.accentStart.opacity(0.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .interpolationMethod(.catmullRom)
+            )
+            .interpolationMethod(.catmullRom)
 
-                LineMark(
-                    x: .value("Day", checkIn.date, unit: .day),
-                    y: .value("Score", checkIn.compositeScore)
-                )
-                .foregroundStyle(Theme.Colors.accentStart)
-                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
-                .interpolationMethod(.catmullRom)
+            LineMark(
+                x: .value("Day", checkIn.date, unit: .day),
+                y: .value("Score", checkIn.compositeScore)
+            )
+            .foregroundStyle(Theme.Colors.accentStart)
+            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+            .interpolationMethod(.catmullRom)
 
-                // Always-visible point at every check-in so a sparse line still
-                // shows where the data is; the final point is emphasized.
-                PointMark(
-                    x: .value("Day", checkIn.date, unit: .day),
-                    y: .value("Score", checkIn.compositeScore)
-                )
-                .foregroundStyle(
-                    checkIn.id == checkIns.last?.id
-                        ? Theme.Colors.accentEnd
-                        : Theme.Colors.accentStart
-                )
-                .symbolSize(checkIn.id == checkIns.last?.id ? 40 : 18)
-            }
+            // Always-visible point at every check-in so a sparse line still
+            // shows where the data is; the final point is emphasized.
+            PointMark(
+                x: .value("Day", checkIn.date, unit: .day),
+                y: .value("Score", checkIn.compositeScore)
+            )
+            .foregroundStyle(
+                checkIn.id == checkIns.last?.id
+                    ? Theme.Colors.accentEnd
+                    : Theme.Colors.accentStart
+            )
+            .symbolSize(checkIn.id == checkIns.last?.id ? 40 : 18)
         }
         .chartXScale(domain: ChartAxis.dateDomain(for: dates))
         .chartXAxis {
@@ -153,6 +147,12 @@ struct ScoreTrendChart: View {
         .chartYAxis(.hidden)
         .chartYScale(domain: 1...5)
         .frame(height: 120)
+        .accessibilityElement()
+        .accessibilityLabel("7-day composite score trend")
+        .accessibilityValue(
+            todayScore.map { String(format: "Today %.1f out of 5 across %d days.", $0, checkIns.count) }
+                ?? "No data yet."
+        )
     }
 
     /// Exactly one check-in: a lone line is invisible, so show the point plus a

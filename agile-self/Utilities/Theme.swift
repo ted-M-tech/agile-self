@@ -6,6 +6,22 @@
 //
 
 import SwiftUI
+import UIKit
+
+// MARK: - Reduce Motion
+
+/// Runs `body` inside `withAnimation(animation)` normally, but skips the animation entirely
+/// when the system "Reduce Motion" accessibility setting is on (the state change still applies
+/// instantly). Use for prominent motion (chart draws, ring fills, confirmation) so it honors
+/// the user's accessibility preference.
+@MainActor
+@discardableResult
+func withMotionAnimation<Result>(_ animation: SwiftUI.Animation, _ body: () -> Result) -> Result {
+    if UIAccessibility.isReduceMotionEnabled {
+        return body()
+    }
+    return withAnimation(animation, body)
+}
 
 // MARK: - Theme
 

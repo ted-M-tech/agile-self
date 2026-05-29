@@ -28,7 +28,9 @@ struct ProfileView: View {
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
                     if let error = viewModel.errorMessage {
-                        profileErrorView(message: error)
+                        ErrorStateView(message: error) {
+                            viewModel.loadData(context: modelContext)
+                        }
                     } else if viewModel.isLoading {
                         profileLoadingView
                     } else {
@@ -89,35 +91,6 @@ struct ProfileView: View {
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textTertiary)
             Spacer(minLength: 100)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - Error State
-
-    private func profileErrorView(message: String) -> some View {
-        VStack(spacing: Theme.Spacing.md) {
-            Spacer(minLength: 80)
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 40))
-                .foregroundStyle(Theme.Colors.warning)
-
-            Text("Something went wrong")
-                .font(Theme.Typography.headline)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            Text(message)
-                .font(Theme.Typography.callout)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-
-            Button {
-                viewModel.loadData(context: modelContext)
-            } label: {
-                Text("Try Again")
-                    .secondaryButtonStyle()
-            }
-            Spacer(minLength: 80)
         }
         .frame(maxWidth: .infinity)
     }
@@ -422,6 +395,7 @@ struct ProfileView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .tracking(1.2)
+                .accessibilityAddTraits(.isHeader)
 
             if let count {
                 Text("\(count)")
