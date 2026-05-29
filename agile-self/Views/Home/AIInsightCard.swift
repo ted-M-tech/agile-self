@@ -39,6 +39,24 @@ struct AIInsightCard: View {
             )
             .accessibilityElement(children: .combine)
             .accessibilityLabel("AI Insight: \(insight)")
+        } else {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "lightbulb")
+                    .font(.callout)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+
+                Text("Your AI insight appears after your first check-in")
+                    .font(Theme.Typography.subhead)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Your AI insight appears after your first check-in")
         }
     }
 }

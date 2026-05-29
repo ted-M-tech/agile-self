@@ -31,6 +31,14 @@ struct PaywallView: View {
         appContainer.subscriptionService
     }
 
+    /// Per-month equivalent of the yearly plan, derived from the real product price.
+    /// Falls back to the JP-locale literal when the product hasn't loaded yet.
+    private var yearlyMonthlyEquivalent: String {
+        guard let yearly = subscriptionService.yearlyProduct else { return "\u{00A5}317/mo" }
+        let perMonth = yearly.price / 12
+        return perMonth.formatted(yearly.priceFormatStyle) + "/mo"
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -286,7 +294,7 @@ struct PaywallView: View {
                 }
 
                 if plan == .yearly {
-                    Text("\u{00A5}317/mo")
+                    Text(yearlyMonthlyEquivalent)
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 } else {

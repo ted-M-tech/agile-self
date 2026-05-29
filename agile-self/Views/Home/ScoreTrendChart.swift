@@ -27,7 +27,11 @@ struct ScoreTrendChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             header
-            chart
+            if checkIns.isEmpty {
+                emptyState
+            } else {
+                chart
+            }
         }
         .cardStyle()
         .onAppear {
@@ -64,6 +68,26 @@ struct ScoreTrendChart: View {
                 }
             }
         }
+    }
+
+    // MARK: - Empty State
+
+    private var emptyState: some View {
+        VStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .font(.title2)
+                .foregroundStyle(Theme.Colors.textTertiary)
+            Text("No scores yet")
+                .font(Theme.Typography.subhead)
+                .foregroundStyle(Theme.Colors.textSecondary)
+            Text("Log your first check-in to start your trend")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, minHeight: 120)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No scores yet. Log your first check-in to start your trend.")
     }
 
     // MARK: - Chart

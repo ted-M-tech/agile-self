@@ -236,22 +236,10 @@ final class OnDeviceAIService: AIServiceProtocol, @unchecked Sendable {
             ? "Your scores are trending upward. The habits you've built are working."
             : "Consider adjusting your routines. Small changes in sleep and exercise often have outsized effects."
 
-        // Simple correlations based on available data
-        var correlations: [Correlation] = []
-        if !health.isEmpty && !checkIns.isEmpty {
-            correlations.append(Correlation(
-                factor1: "Sleep",
-                factor2: "Focus",
-                coefficient: 0.65,
-                description: "Better sleep tends to improve focus"
-            ))
-            correlations.append(Correlation(
-                factor1: "Exercise",
-                factor2: "Energy",
-                coefficient: 0.58,
-                description: "Active days correlate with higher energy"
-            ))
-        }
+        // Real correlations via Pearson on matched check-in/health day pairs.
+        // AnalyticsService is nonisolated, so it is safe to use from this nonisolated
+        // method; it returns [] until there are enough matched pairs (>=5).
+        let correlations = AnalyticsService().detectCorrelations(checkIns: checkIns, health: health)
 
         return MonthlyReportResult(
             executiveSummary: executiveSummary,

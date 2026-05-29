@@ -6,27 +6,23 @@
 //
 
 import SwiftUI
+import SwiftData
 
 // MARK: - WeeklyConversationView
 
 struct WeeklyConversationView: View {
+    let checkIns: [DailyCheckIn]
+    let review: WeeklyReview?
     let onComplete: () -> Void
 
+    @Environment(AppContainer.self) private var appContainer
+    @Environment(\.modelContext) private var modelContext
+
     @State private var messages: [ConversationMessage] = []
+    @State private var questions: [String] = []
     @State private var inputText = ""
     @State private var isAITyping = false
     @FocusState private var isInputFocused: Bool
-
-    private let mockConversation: [ConversationMessage] = {
-        [
-            ConversationMessage(role: .assistant, content: "Great week, Tetsuya! Your overall score averaged 7.4 - that's up from 6.8 last week. What do you think drove the improvement?"),
-            ConversationMessage(role: .user, content: "I think running regularly helped my energy a lot"),
-            ConversationMessage(role: .assistant, content: "The data supports that. On days you ran, your energy was 1.8 points higher on average. Your focus also improved by 1.2 points on run days. Want to set a running target for next week?"),
-            ConversationMessage(role: .user, content: "Yes, I'd like to run at least 3 times"),
-            ConversationMessage(role: .assistant, content: "Perfect. I noticed your stress peaked on Wednesday (7/10). What happened?"),
-            ConversationMessage(role: .user, content: "Back-to-back meetings all day, no breaks"),
-        ]
-    }()
 
     private let quickResponses: [String] = [
         "I felt more energized",
@@ -49,8 +45,8 @@ struct WeeklyConversationView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .onAppear {
-            loadMockMessages()
+        .task {
+            await seedOpeningQuestion()
         }
     }
 
@@ -215,15 +211,25 @@ struct WeeklyConversationView: View {
 
     // MARK: - Actions
 
-    private func loadMockMessages() {
-        // Stagger the initial messages for a natural feel
-        for (index, message) in mockConversation.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.15) {
-                withAnimation(Theme.Animation.chatMessage) {
-                    messages.append(message)
-                }
-            }
+    /// Restores a persisted transcript, or seeds the opening question from the
+    /// on-device question bank. The questions are a fixed opening-question bank — they
+    /// are NOT per-turn AI reasoning.
+    private func seedOpeningQuestion() async {
+        // Always (re)load the question bank so reply-indexed follow-ups work after restore.
+        questions = (try? await appContainer.aiService.generateWeeklyQuestions(checkIns: checkIns, health: [])) ?? []
+
+        // Restore an existing transcript if one was saved.
+        if let existing = review?.conversations, !existing.isEmpty {
+            messages = existing
+            return
         }
+
+        // Fresh conversation: open with the first banked question.
+        guard let opening = questions.first else { return }
+        withAnimation(Theme.Animation.chatMessage) {
+            messages = [ConversationMessage(role: .assistant, content: opening)]
+        }
+        persist()
     }
 
     private func sendMessage(_ text: String) {
@@ -231,25 +237,36 @@ struct WeeklyConversationView: View {
         withAnimation(Theme.Animation.chatMessage) {
             messages.append(userMessage)
         }
+        persist()
 
-        // Simulate AI typing
         withAnimation(Theme.Animation.standard) {
             isAITyping = true
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        Task {
+            // Brief, natural pacing delay — the next line is the next banked question,
+            // indexed by the user's reply count (not assistant count).
+            try? await Task.sleep(for: .milliseconds(700))
             withAnimation(Theme.Animation.standard) {
                 isAITyping = false
             }
 
-            let aiResponse = ConversationMessage(
-                role: .assistant,
-                content: "That's a great observation. Let me note that as an action item for next week. Is there anything else you'd like to focus on?"
-            )
+            let userReplies = messages.filter { $0.role == .user }.count
+            let nextContent = userReplies < questions.count
+                ? questions[userReplies]
+                : "Anything else you'd like to add before we wrap up?"
+
             withAnimation(Theme.Animation.chatMessage) {
-                messages.append(aiResponse)
+                messages.append(ConversationMessage(role: .assistant, content: nextContent))
             }
+            persist()
         }
+    }
+
+    /// Persists the current transcript onto the shared WeeklyReview model.
+    private func persist() {
+        review?.setConversations(messages)
+        try? modelContext.save()
     }
 }
 
@@ -303,5 +320,11 @@ private struct MessageBubble: View {
 // MARK: - Preview
 
 #Preview {
-    WeeklyConversationView(onComplete: {})
+    WeeklyConversationView(
+        checkIns: MockData.weeklyCheckIns,
+        review: MockData.weeklyReview,
+        onComplete: {}
+    )
+    .modelContainer(MockData.previewContainer)
+    .environment(AppContainer(modelContainer: MockData.previewContainer))
 }

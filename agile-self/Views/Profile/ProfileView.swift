@@ -19,6 +19,9 @@ struct ProfileView: View {
     // MARK: - UI State
 
     @State private var showCompletedActions = false
+    @State private var showAddAction = false
+    @State private var showSettings = false
+    @State private var showPaywall = false
 
     var body: some View {
         NavigationStack {
@@ -48,6 +51,28 @@ struct ProfileView: View {
                     subscriptionService: appContainer.subscriptionService
                 )
                 viewModel.loadData(context: modelContext)
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showAddAction = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(Theme.Colors.accentStart)
+                    }
+                    .accessibilityLabel("Add action")
+                }
+            }
+            .sheet(isPresented: $showAddAction) {
+                AddActionView { text, priority, deadline in
+                    viewModel.addAction(text: text, priority: priority, deadline: deadline, context: modelContext)
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
             }
         }
     }
@@ -232,6 +257,15 @@ struct ProfileView: View {
                                 viewModel.toggleAction(action)
                             }
                         }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                withAnimation(Theme.Animation.smooth) {
+                                    viewModel.deleteAction(action, context: modelContext)
+                                }
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
 
                         if action.id != viewModel.activeActions.last?.id {
                             Divider()
@@ -298,6 +332,15 @@ struct ProfileView: View {
                                 viewModel.toggleAction(action)
                             }
                         }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                withAnimation(Theme.Animation.smooth) {
+                                    viewModel.deleteAction(action, context: modelContext)
+                                }
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
 
                         if action.id != viewModel.completedActions.last?.id {
                             Divider()
@@ -320,26 +363,26 @@ struct ProfileView: View {
             sectionHeader(title: "PREFERENCES")
 
             VStack(spacing: 0) {
-                settingsRow(icon: "heart.fill", label: "Health Data", iconColor: .red)
+                settingsRow(icon: "heart.fill", label: "Health Data", iconColor: .red) { showSettings = true }
                 settingsDivider
-                settingsRow(icon: "iphone", label: "Screen Time", iconColor: .cyan)
+                settingsRow(icon: "iphone", label: "Screen Time", iconColor: .cyan) { showSettings = true }
                 settingsDivider
-                settingsRow(icon: "bell.fill", label: "Notifications", iconColor: Theme.Colors.warning)
+                settingsRow(icon: "bell.fill", label: "Notifications", iconColor: Theme.Colors.warning) { showSettings = true }
                 settingsDivider
-                settingsRow(icon: "crown.fill", label: "Subscription", iconColor: Theme.Dimension.energy)
+                settingsRow(icon: "crown.fill", label: "Subscription", iconColor: Theme.Dimension.energy) { showPaywall = true }
                 settingsDivider
-                settingsRow(icon: "square.and.arrow.up", label: "Export Data", iconColor: Theme.Colors.success)
+                settingsRow(icon: "square.and.arrow.up", label: "Export Data", iconColor: Theme.Colors.success) { showSettings = true }
                 settingsDivider
-                settingsRow(icon: "info.circle", label: "About", iconColor: Theme.Colors.textSecondary)
+                settingsRow(icon: "info.circle", label: "About", iconColor: Theme.Colors.textSecondary) { showSettings = true }
             }
             .background(Theme.Colors.backgroundSecondary)
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
         }
     }
 
-    private func settingsRow(icon: String, label: String, iconColor: Color) -> some View {
+    private func settingsRow(icon: String, label: String, iconColor: Color, action: @escaping () -> Void) -> some View {
         Button {
-            // Navigation placeholder
+            action()
         } label: {
             HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: icon)

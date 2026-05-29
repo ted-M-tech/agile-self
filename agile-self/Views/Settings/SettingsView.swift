@@ -13,6 +13,7 @@ import SwiftData
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppContainer.self) private var appContainer
     @Query private var profiles: [UserProfile]
 
     private var profile: UserProfile? { profiles.first }
@@ -32,6 +33,8 @@ struct SettingsView: View {
         return current.hasPrefix("ja") ? "ja" : "en"
     }()
     @State private var showLanguageRestartAlert = false
+    @State private var exportFile: ExportedDataFile?
+    @State private var showDeleteConfirmation = false
 
     // MARK: - Constants
 
@@ -83,7 +86,27 @@ struct SettingsView: View {
                         .foregroundStyle(Theme.Colors.accentStart)
                 }
             }
-            .task { loadProfile() }
+            .task {
+                loadProfile()
+                exportFile = appContainer.dataManagementService.exportFile(context: modelContext)
+            }
+            .confirmationDialog(
+                "Delete All Data?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Everything", role: .destructive) {
+                    appContainer.dataManagementService.deleteAllData(context: modelContext)
+                    appContainer.refreshCloudAIPreference(context: modelContext)
+                    // RootView gates onboarding on this @AppStorage key (see D4). Reset
+                    // it so a full wipe returns the user to onboarding.
+                    UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+                    dismiss()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently deletes all your check-ins, reviews, reports, and actions on this device. This cannot be undone.")
+            }
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
             }
@@ -506,40 +529,62 @@ struct SettingsView: View {
             sectionHeader(title: "DATA")
 
             VStack(spacing: 0) {
-                Button {
-                    // Export placeholder
-                } label: {
-                    HStack(spacing: Theme.Spacing.md) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.callout)
-                            .foregroundStyle(Theme.Colors.success)
-                            .frame(width: 24, height: 24)
-
-                        Text("Export Data")
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-
-                        Spacer()
-
-                        Text("JSON / PDF")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(Theme.Colors.textTertiary)
+                if let exportFile {
+                    ShareLink(item: exportFile, preview: SharePreview("Agile Self Data Export")) {
+                        dataRowLabel(icon: "square.and.arrow.up", title: "Export Data", trailing: "JSON", iconColor: Theme.Colors.success)
                     }
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.vertical, Theme.Spacing.md)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Export data")
+                    .accessibilityHint("Share your data as a JSON file")
+                } else {
+                    dataRowLabel(icon: "square.and.arrow.up", title: "Export Data", trailing: "JSON", iconColor: Theme.Colors.success)
+                        .opacity(0.5)
+                }
+
+                Divider()
+                    .overlay(Theme.Colors.divider)
+                    .padding(.leading, Theme.Spacing.md + 24 + Theme.Spacing.md)
+
+                Button(role: .destructive) {
+                    showDeleteConfirmation = true
+                } label: {
+                    dataRowLabel(icon: "trash.fill", title: "Delete All Data", trailing: nil, iconColor: Theme.Colors.error)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Export data")
-                .accessibilityHint("Export your data as JSON or PDF")
+                .accessibilityLabel("Delete all data")
+                .accessibilityHint("Permanently deletes all your data on this device")
             }
             .background(Theme.Colors.backgroundSecondary)
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
         }
+    }
+
+    private func dataRowLabel(icon: String, title: String, trailing: String?, iconColor: Color) -> some View {
+        HStack(spacing: Theme.Spacing.md) {
+            Image(systemName: icon)
+                .font(.callout)
+                .foregroundStyle(iconColor)
+                .frame(width: 24, height: 24)
+
+            Text(title)
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Colors.textPrimary)
+
+            Spacer()
+
+            if let trailing {
+                Text(trailing)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(Theme.Colors.textTertiary)
+        }
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.md)
+        .contentShape(Rectangle())
     }
 
     // MARK: - About Section

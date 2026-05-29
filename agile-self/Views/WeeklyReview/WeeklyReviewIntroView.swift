@@ -11,10 +11,9 @@ import Charts
 // MARK: - WeeklyReviewIntroView
 
 struct WeeklyReviewIntroView: View {
+    let checkIns: [DailyCheckIn]
     let onStartReview: () -> Void
     let onSkip: () -> Void
-
-    private let checkIns = MockData.weeklyCheckIns
 
     @State private var animateBars = false
 
@@ -224,6 +223,7 @@ struct WeeklyReviewIntroView: View {
 
 #Preview {
     WeeklyReviewIntroView(
+        checkIns: MockData.weeklyCheckIns,
         onStartReview: {},
         onSkip: {}
     )

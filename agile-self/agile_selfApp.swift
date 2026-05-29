@@ -37,6 +37,7 @@ struct agile_selfApp: App {
             self.appContainer = app
             app.refreshCloudAIPreference(context: container.mainContext)
             app.watchConnectivityService.activate()
+            Task { await app.refreshSubscriptionState() }
         } catch {
             self.sharedModelContainer = nil
             self.appContainer = nil

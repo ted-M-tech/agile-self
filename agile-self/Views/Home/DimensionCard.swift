@@ -9,12 +9,19 @@ import SwiftUI
 
 struct DimensionCard: View {
     let dimension: DimensionType
-    let score: Int
+    /// nil = no check-in logged yet → placeholder ring + em-dash.
+    let score: Int?
 
     @State private var animateRing = false
 
     private var progress: Double {
-        Double(score) / 10.0
+        guard let score else { return 0 }
+        return Double(score) / 10.0
+    }
+
+    private var accessibilityText: String {
+        guard let score else { return "\(dimension.label): no data yet" }
+        return "\(dimension.label) score: \(score) out of 10"
     }
 
     private var dimensionColor: Color {
@@ -58,9 +65,15 @@ struct DimensionCard: View {
 
                 // Score text
                 VStack(spacing: 0) {
-                    Text("\(score)")
-                        .font(Theme.Typography.scoreMedium)
-                        .foregroundStyle(Theme.Colors.textPrimary)
+                    if let score {
+                        Text("\(score)")
+                            .font(Theme.Typography.scoreMedium)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                    } else {
+                        Text("\u{2014}")
+                            .font(Theme.Typography.scoreMedium)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
 
                     Text("/10")
                         .font(Theme.Typography.caption)
@@ -78,7 +91,7 @@ struct DimensionCard: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(dimension.label) score: \(score) out of 10")
+        .accessibilityLabel(accessibilityText)
     }
 }
 

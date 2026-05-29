@@ -91,13 +91,35 @@ struct MainTabView: View {
 
 // MARK: - Weekly Review Flow
 
-/// Manages the multi-screen weekly review flow.
+/// Manages the multi-screen weekly review flow and owns its data: this week's
+/// check-ins (via a stable week-of-year `@Query`) and the shared `WeeklyReview` model.
 private struct WeeklyReviewFlowView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppContainer.self) private var appContainer
+    @Environment(\.modelContext) private var modelContext
+
+    @Query private var weeklyCheckIns: [DailyCheckIn]
     @State private var phase: ReviewPhase = .intro
+    @State private var review: WeeklyReview?
+    @State private var summaryResult: WeeklySummaryResult?
+    @State private var isGeneratingSummary = false
 
     enum ReviewPhase {
         case intro, conversation, summary
+    }
+
+    init() {
+        // Stable week boundary (week-of-year) — used for BOTH the check-in window and
+        // the fetch-or-create review key, so the review row is deterministic per week
+        // (avoids duplicate rows from a rolling today-minus-6 anchor).
+        let interval = Calendar.current.dateInterval(of: .weekOfYear, for: Date())
+        let weekStart = interval?.start ?? Calendar.current.startOfDay(for: Date())
+        let weekEnd = interval?.end ?? Date()
+        _weeklyCheckIns = Query(
+            filter: #Predicate<DailyCheckIn> { $0.date >= weekStart && $0.date < weekEnd },
+            sort: \.date,
+            order: .forward
+        )
     }
 
     var body: some View {
@@ -106,15 +128,27 @@ private struct WeeklyReviewFlowView: View {
                 switch phase {
                 case .intro:
                     WeeklyReviewIntroView(
-                        onStartReview: { phase = .conversation },
-                        onSkip: { phase = .summary }
+                        checkIns: weeklyCheckIns,
+                        onStartReview: {
+                            ensureReview()
+                            phase = .conversation
+                        },
+                        onSkip: { finishWithSummary() }
                     )
                 case .conversation:
                     WeeklyConversationView(
-                        onComplete: { phase = .summary }
+                        checkIns: weeklyCheckIns,
+                        review: review,
+                        onComplete: { finishWithSummary() }
                     )
                 case .summary:
-                    WeeklySummaryView(onDismiss: { dismiss() })
+                    WeeklySummaryView(
+                        checkIns: weeklyCheckIns,
+                        review: review,
+                        result: summaryResult,
+                        isLoading: isGeneratingSummary,
+                        onDismiss: { dismiss() }
+                    )
                 }
             }
             .toolbar {
@@ -125,6 +159,61 @@ private struct WeeklyReviewFlowView: View {
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    /// Fetches or creates the WeeklyReview for the current week, eagerly, so the same
+    /// model identity is shared with the conversation view's transcript writes.
+    private func ensureReview() {
+        guard review == nil else { return }
+        let interval = Calendar.current.dateInterval(of: .weekOfYear, for: Date())
+        let weekStart = interval?.start ?? Calendar.current.startOfDay(for: Date())
+        let weekEndInclusive: Date = {
+            guard let end = interval?.end else { return Date() }
+            return Calendar.current.date(byAdding: .day, value: -1, to: end) ?? end
+        }()
+
+        let descriptor = FetchDescriptor<WeeklyReview>(
+            predicate: #Predicate<WeeklyReview> { $0.weekStart == weekStart }
+        )
+        if let existing = try? modelContext.fetch(descriptor).first {
+            review = existing
+        } else {
+            let created = WeeklyReview(weekStart: weekStart, weekEnd: weekEndInclusive)
+            modelContext.insert(created)
+            try? modelContext.save()
+            review = created
+        }
+    }
+
+    /// Generates the on-device weekly summary and persists it onto the review.
+    private func finishWithSummary() {
+        ensureReview()
+        phase = .summary
+        isGeneratingSummary = true
+        Task {
+            defer { isGeneratingSummary = false }
+            do {
+                let result = try await appContainer.aiService.generateWeeklySummary(
+                    conversation: review?.conversations ?? [],
+                    checkIns: weeklyCheckIns
+                )
+                summaryResult = result
+
+                // Persist only if the summary has real content.
+                if let review,
+                   !result.wins.isEmpty || !result.challenges.isEmpty || !result.summary.isEmpty {
+                    review.wins = result.wins
+                    review.challenges = result.challenges
+                    review.summary = result.summary
+                    review.aiTakeaway = result.aiTakeaway
+                    review.isCompleted = true
+                    review.completedAt = Date()
+                    try? modelContext.save()
+                }
+            } catch {
+                // Degrade to whatever is persisted on the review; summaryResult stays nil.
+            }
+        }
     }
 }
 

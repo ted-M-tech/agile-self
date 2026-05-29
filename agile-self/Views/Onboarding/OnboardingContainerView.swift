@@ -24,6 +24,7 @@ struct OnboardingContainerView: View {
     let onComplete: () -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppContainer.self) private var appContainer
     @State private var currentPage: OnboardingPage = .welcome
     @State private var animateWelcome = false
     @State private var userName: String = ""
@@ -178,6 +179,45 @@ struct OnboardingContainerView: View {
         let descriptor = FetchDescriptor<UserProfile>()
         guard let profile = try? modelContext.fetch(descriptor).first else { return }
         profile.displayName = userName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        try? modelContext.save()
+    }
+
+    /// Requests the permissions the user toggled on, then persists the notification
+    /// preference (and schedules reminders) to the singleton UserProfile.
+    private func requestSelectedPermissions() async {
+        if healthEnabled {
+            try? await appContainer.healthKitService.requestAuthorization()
+        }
+
+        let descriptor = FetchDescriptor<UserProfile>()
+        guard let profile = try? modelContext.fetch(descriptor).first else { return }
+
+        if notificationsEnabled {
+            let granted = await appContainer.notificationService.requestAuthorization()
+            profile.notificationsEnabled = granted
+            if granted {
+                appContainer.notificationService.scheduleDailyReminder(
+                    hour: profile.checkInReminderHour,
+                    minute: profile.checkInReminderMinute
+                )
+                appContainer.notificationService.scheduleWeeklyReview(dayOfWeek: profile.weeklyReviewDay)
+            }
+        } else {
+            profile.notificationsEnabled = false
+            appContainer.notificationService.cancelAll()
+        }
+
+        try? modelContext.save()
+    }
+
+    /// Marks onboarding complete in the persisted profile, then advances the app.
+    private func completeOnboarding() {
+        let descriptor = FetchDescriptor<UserProfile>()
+        if let profile = try? modelContext.fetch(descriptor).first {
+            profile.hasCompletedOnboarding = true
+            try? modelContext.save()
+        }
+        onComplete()
     }
 
     // MARK: - Screen 3: How It Works
@@ -331,14 +371,26 @@ struct OnboardingContainerView: View {
             Spacer()
 
             Button {
-                withAnimation(Theme.Animation.smooth) {
-                    currentPage = .firstCheckIn
+                isRequestingPermissions = true
+                Task {
+                    await requestSelectedPermissions()
+                    isRequestingPermissions = false
+                    withAnimation(Theme.Animation.smooth) {
+                        currentPage = .firstCheckIn
+                    }
                 }
             } label: {
-                Text("Continue")
-                    .primaryButtonStyle()
+                Group {
+                    if isRequestingPermissions {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Continue")
+                    }
+                }
+                .primaryButtonStyle()
             }
             .buttonStyle(.plain)
+            .disabled(isRequestingPermissions)
             .padding(.horizontal, Theme.Spacing.lg)
             .padding(.bottom, Theme.Spacing.xxl)
             .accessibilityHint("All permissions are optional. Tap to proceed.")
@@ -346,7 +398,8 @@ struct OnboardingContainerView: View {
     }
 
     @State private var healthEnabled = false
-    @State private var notificationsEnabled = false
+    @State private var notificationsEnabled = true
+    @State private var isRequestingPermissions = false
 
     private func permissionRow(
         icon: String,
@@ -439,7 +492,7 @@ struct OnboardingContainerView: View {
 
             VStack(spacing: Theme.Spacing.md) {
                 Button {
-                    onComplete()
+                    completeOnboarding()
                 } label: {
                     HStack(spacing: Theme.Spacing.sm) {
                         Image(systemName: "pencil.line")
@@ -451,7 +504,7 @@ struct OnboardingContainerView: View {
                 .accessibilityHint("Opens the daily check-in form")
 
                 Button {
-                    onComplete()
+                    completeOnboarding()
                 } label: {
                     Text("Skip for now")
                         .ghostButtonStyle()
@@ -491,5 +544,7 @@ struct OnboardingContainerView: View {
 
 #Preview {
     OnboardingContainerView(onComplete: {})
+        .modelContainer(MockData.previewContainer)
+        .environment(AppContainer(modelContainer: MockData.previewContainer))
         .preferredColorScheme(.dark)
 }

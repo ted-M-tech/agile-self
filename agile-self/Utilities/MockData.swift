@@ -127,6 +127,34 @@ enum MockData {
         return report
     }()
 
+    /// A completed weekly review (for WeeklyReview previews only).
+    static let weeklyReview: WeeklyReview = {
+        let review = WeeklyReview(
+            weekStart: weeklyCheckIns.first?.date ?? Date(),
+            weekEnd: weeklyCheckIns.last?.date ?? Date(),
+            wins: [
+                "Maintained a 12-day check-in streak",
+                "Focus scores improved by 18% vs last week",
+                "Ran 3 times this week (11km total)",
+            ],
+            challenges: [
+                "Stress spiked on Wednesday - back-to-back meetings",
+                "Screen time exceeded 3h on 4 of 7 days",
+            ],
+            summary: "A strong week overall. Your consistency is paying off with steady improvements across all dimensions. The midweek stress spike is a pattern worth addressing.",
+            aiTakeaway: "Try blocking 30 minutes of no-meeting time on Wednesdays. Your data shows a clear focus-stress correlation on meeting-heavy days.",
+            isCompleted: true,
+            completedAt: Date()
+        )
+        review.setConversations([
+            ConversationMessage(role: .assistant, content: "Great week, Tetsuya! Your overall score averaged 7.4 - that's up from 6.8 last week. What do you think drove the improvement?"),
+            ConversationMessage(role: .user, content: "I think running regularly helped my energy a lot"),
+            ConversationMessage(role: .assistant, content: "The data supports that. On days you ran, your energy was 1.8 points higher on average. Want to set a running target for next week?"),
+            ConversationMessage(role: .user, content: "Yes, I'd like to run at least 3 times"),
+        ])
+        return review
+    }()
+
     /// Action items for profile/action views.
     static let actionItems: [ActionItemV2] = {
         let calendar = Calendar.current

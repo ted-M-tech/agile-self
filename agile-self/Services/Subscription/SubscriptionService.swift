@@ -23,6 +23,12 @@ final class SubscriptionService {
     var isLoading = false
     var errorMessage: String?
 
+    /// Invoked after entitlements are refreshed, with the current premium status.
+    /// Installed by `AppContainer` to keep `UserProfile.subscriptionTier` in sync.
+    /// `@ObservationIgnored`: it's a callback sink (not observable UI state), and the
+    /// `@Observable` macro can't synthesize a tracked accessor for a `@MainActor` closure type.
+    @ObservationIgnored var onEntitlementsChanged: (@MainActor (Bool) -> Void)?
+
     var isPremium: Bool {
         !purchasedProductIDs.isEmpty
     }
@@ -99,6 +105,7 @@ final class SubscriptionService {
             }
         }
         purchasedProductIDs = purchased
+        onEntitlementsChanged?(!purchased.isEmpty)
     }
 
     // MARK: - Transaction Listener

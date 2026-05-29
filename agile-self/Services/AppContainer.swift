@@ -66,8 +66,27 @@ final class AppContainer {
     var subscriptionService: SubscriptionService {
         if let existing = _subscriptionService { return existing }
         let service = SubscriptionService()
+        // Sync UserProfile.subscriptionTier whenever entitlements change. Safe no-op
+        // when no profile exists yet (fresh install / post-wipe) — do NOT create one here.
+        let container = modelContainer
+        service.onEntitlementsChanged = { isPremium in
+            let context = container.mainContext
+            guard let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first else { return }
+            let newTier: SubscriptionTier = isPremium ? .premium : .free
+            if profile.subscriptionTier != newTier {
+                profile.subscriptionTier = newTier
+                try? context.save()
+            }
+        }
         _subscriptionService = service
         return service
+    }
+
+    /// Loads StoreKit products and refreshes entitlements, syncing the persisted
+    /// `UserProfile.subscriptionTier`. Call at launch.
+    func refreshSubscriptionState() async {
+        await subscriptionService.loadProducts()
+        await subscriptionService.updatePurchasedProducts()
     }
 
     private var _notificationService: NotificationService?
@@ -99,6 +118,14 @@ final class AppContainer {
         if let existing = _watchConnectivityService { return existing }
         let service = WatchConnectivityService(modelContainer: modelContainer)
         _watchConnectivityService = service
+        return service
+    }
+
+    private var _dataManagementService: DataManagementService?
+    var dataManagementService: DataManagementService {
+        if let existing = _dataManagementService { return existing }
+        let service = DataManagementService()
+        _dataManagementService = service
         return service
     }
 }

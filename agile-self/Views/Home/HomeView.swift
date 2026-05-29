@@ -174,7 +174,7 @@ struct HomeView: View {
             ForEach(Array(DimensionType.allCases.enumerated()), id: \.element) { index, dimension in
                 DimensionCard(
                     dimension: dimension,
-                    score: viewModel.todayCheckIn?.score(for: dimension) ?? 0
+                    score: viewModel.todayCheckIn?.score(for: dimension)
                 )
                 .opacity(dimensionsAppeared ? 1 : 0)
                 .offset(y: dimensionsAppeared ? 0 : 20)
@@ -270,15 +270,29 @@ struct HomeView: View {
     }
 
     private var noHealthDataView: some View {
-        HStack(spacing: Theme.Spacing.sm) {
+        VStack(spacing: Theme.Spacing.sm) {
             Image(systemName: "heart.slash")
+                .font(.title3)
                 .foregroundStyle(Theme.Colors.textTertiary)
             Text("No health data available")
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textTertiary)
+            Text("Allow Health access, then pull to refresh")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .multilineTextAlignment(.center)
+            Button {
+                Task { await viewModel.loadHealthData(context: modelContext) }
+            } label: {
+                Text("Refresh")
+                    .secondaryButtonStyle()
+            }
+            .padding(.top, Theme.Spacing.xs)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.lg)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No health data available. Allow Health access, then pull to refresh.")
     }
 
     // MARK: - 6. Check-in CTA
