@@ -107,6 +107,7 @@
 		A7431C8A2FC958740010A92D /* AgileSelfWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AgileSelfWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A7431C8B2FC958740010A92D /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		A7431C8D2FC958740010A92D /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		A7431CA52FC961BD0010A92D /* AgileSelfWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AgileSelfWidgetExtension.entitlements; sourceTree = "<group>"; };
 		A769DBE42EDE77DB005F9566 /* DeviceActivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeviceActivity.framework; path = System/Library/Frameworks/DeviceActivity.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -243,6 +244,7 @@
 		A71FBFE12EDCF67D00467EF7 = {
 			isa = PBXGroup;
 			children = (
+				A7431CA52FC961BD0010A92D /* AgileSelfWidgetExtension.entitlements */,
 				A71FBFEC2EDCF67D00467EF7 /* agile-self */,
 				A71FBFFA2EDCF67F00467EF7 /* agile-selfTests */,
 				A71FC0042EDCF67F00467EF7 /* agile-selfUITests */,
@@ -1207,6 +1209,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = AgileSelfWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Q7B66QH7YK;
@@ -1239,6 +1242,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = AgileSelfWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Q7B66QH7YK;
