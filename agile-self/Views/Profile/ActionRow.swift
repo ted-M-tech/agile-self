@@ -10,6 +10,9 @@ import SwiftUI
 struct ActionRow: View {
     let action: ActionItemV2
     var onToggle: (() -> Void)?
+    /// When provided, a visible trailing menu offers Delete (discoverable, unlike a
+    /// long-press-only context menu).
+    var onDelete: (() -> Void)?
 
     private var deadlineText: String? {
         guard let days = action.daysUntilDeadline else { return nil }
@@ -33,52 +36,69 @@ struct ActionRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
-            // Checkbox
-            checkboxButton
+            // Checkbox + text content (combined into one VoiceOver element).
+            HStack(spacing: Theme.Spacing.md) {
+                checkboxButton
 
-            // Text content
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(action.text)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(action.isCompleted ? Theme.Colors.textTertiary : Theme.Colors.textPrimary)
-                    .strikethrough(action.isCompleted, color: Theme.Colors.textTertiary)
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    Text(action.text)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(action.isCompleted ? Theme.Colors.textTertiary : Theme.Colors.textPrimary)
+                        .strikethrough(action.isCompleted, color: Theme.Colors.textTertiary)
+                        .lineLimit(2)
 
-                // Metadata row
-                if !action.isCompleted {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        // Priority pill
-                        Text(action.priority.displayName)
-                            .pillStyle(color: action.priority.color)
+                    // Metadata row
+                    if !action.isCompleted {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            // Priority pill
+                            Text(action.priority.displayName)
+                                .pillStyle(color: action.priority.color)
 
-                        // Source badge
-                        if action.source == .aiSuggested {
-                            Label("AI", systemImage: "sparkles")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.accentStart)
-                        }
-
-                        Spacer()
-
-                        // Deadline
-                        if let deadline = deadlineText {
-                            HStack(spacing: 2) {
-                                Image(systemName: "calendar")
-                                    .font(.caption2)
-                                Text(deadline)
+                            // Source badge
+                            if action.source == .aiSuggested {
+                                Label("AI", systemImage: "sparkles")
                                     .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.accentStart)
                             }
-                            .foregroundStyle(deadlineColor)
+
+                            Spacer()
+
+                            // Deadline
+                            if let deadline = deadlineText {
+                                HStack(spacing: 2) {
+                                    Image(systemName: "calendar")
+                                        .font(.caption2)
+                                    Text(deadline)
+                                        .font(Theme.Typography.caption)
+                                }
+                                .foregroundStyle(deadlineColor)
+                            }
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(accessibilityDescription)
+
+            // Visible, discoverable delete affordance (kept as its own VoiceOver element).
+            if let onDelete {
+                Menu {
+                    Button(role: .destructive, action: onDelete) {
+                        Label("Delete", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.callout)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("More options for \(action.text)")
             }
         }
         .padding(.vertical, Theme.Spacing.sm)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityDescription)
-        .accessibilityAddTraits(.isButton)
     }
 
     // MARK: - Checkbox

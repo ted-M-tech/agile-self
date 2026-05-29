@@ -89,7 +89,54 @@ final class ProfileViewModel {
 
     // MARK: - Actions
 
-    func toggleAction(_ action: ActionItemV2) {
+    /// Toggles completion and persists it. Without an explicit save the change relied on
+    /// implicit autosave and could be lost; this also refreshes the active/completed split.
+    func toggleAction(_ action: ActionItemV2, context: ModelContext) {
         action.toggleCompletion()
+        do {
+            try context.save()
+            reloadActions(context: context)
+        } catch {
+            errorMessage = "Unable to update the action. Please try again."
+        }
+    }
+
+    /// Creates a new manual action item and persists it, then refreshes the list.
+    func addAction(text: String, priority: ActionPriority, deadline: Date?, context: ModelContext) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let action = ActionItemV2(
+            text: trimmed,
+            deadline: deadline,
+            priority: priority,
+            source: .manual
+        )
+        context.insert(action)
+        do {
+            try context.save()
+            reloadActions(context: context)
+        } catch {
+            errorMessage = "Unable to save the action. Please try again."
+        }
+    }
+
+    /// Deletes an action item and persists the change, then refreshes the list.
+    func deleteAction(_ action: ActionItemV2, context: ModelContext) {
+        context.delete(action)
+        do {
+            try context.save()
+            reloadActions(context: context)
+        } catch {
+            errorMessage = "Unable to delete the action. Please try again."
+        }
+    }
+
+    /// Refreshes just the action list without toggling loading/error state.
+    private func reloadActions(context: ModelContext) {
+        let descriptor = FetchDescriptor<ActionItemV2>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        actions = (try? context.fetch(descriptor)) ?? actions
     }
 }

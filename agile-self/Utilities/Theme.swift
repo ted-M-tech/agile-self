@@ -6,6 +6,22 @@
 //
 
 import SwiftUI
+import UIKit
+
+// MARK: - Reduce Motion
+
+/// Runs `body` inside `withAnimation(animation)` normally, but skips the animation entirely
+/// when the system "Reduce Motion" accessibility setting is on (the state change still applies
+/// instantly). Use for prominent motion (chart draws, ring fills, confirmation) so it honors
+/// the user's accessibility preference.
+@MainActor
+@discardableResult
+func withMotionAnimation<Result>(_ animation: SwiftUI.Animation, _ body: () -> Result) -> Result {
+    if UIAccessibility.isReduceMotionEnabled {
+        return body()
+    }
+    return withAnimation(animation, body)
+}
 
 // MARK: - Theme
 
@@ -87,18 +103,24 @@ enum Theme {
     // MARK: - Typography (SF Pro Rounded + SF Pro Text)
 
     enum Typography {
-        static let display = Font.system(size: 34, weight: .bold, design: .rounded)
-        static let title1 = Font.system(size: 28, weight: .semibold, design: .rounded)
-        static let title2 = Font.system(size: 22, weight: .semibold, design: .rounded)
-        static let title3 = Font.system(size: 20, weight: .medium, design: .rounded)
-        static let headline = Font.system(size: 17, weight: .semibold, design: .default)
-        static let body = Font.system(size: 17, weight: .regular, design: .default)
-        static let callout = Font.system(size: 16, weight: .regular, design: .default)
-        static let subhead = Font.system(size: 15, weight: .regular, design: .default)
-        static let footnote = Font.system(size: 13, weight: .regular, design: .default)
-        static let caption = Font.system(size: 12, weight: .regular, design: .default)
+        // Dynamic Type-scalable: text-style-based system fonts scale with the
+        // user's preferred content size. Each text style's default size matches
+        // the previous fixed sizes closely, so default-setting layout is preserved.
+        static let display = Font.system(.largeTitle, design: .rounded).weight(.bold)
+        static let title1 = Font.system(.title, design: .rounded).weight(.semibold)
+        static let title2 = Font.system(.title2, design: .rounded).weight(.semibold)
+        static let title3 = Font.system(.title3, design: .rounded).weight(.medium)
+        static let headline = Font.system(.headline, design: .default).weight(.semibold)
+        static let body = Font.system(.body, design: .default)
+        static let callout = Font.system(.callout, design: .default)
+        static let subhead = Font.system(.subheadline, design: .default)
+        static let footnote = Font.system(.footnote, design: .default)
+        static let caption = Font.system(.caption, design: .default)
 
-        // Convenience for score numbers (monospaced rounded)
+        // Score numerals: intentionally fixed-size (rounded). These hero numbers
+        // live in circular rings / gauges (DimensionCard, InsightsView) that would
+        // distort or clip if the numerals scaled to accessibility sizes. Keep them
+        // fixed for layout integrity; surrounding labels above use scalable styles.
         static let scoreDisplay = Font.system(size: 48, weight: .bold, design: .rounded)
         static let scoreLarge = Font.system(size: 34, weight: .bold, design: .rounded)
         static let scoreMedium = Font.system(size: 24, weight: .bold, design: .rounded)
@@ -174,11 +196,13 @@ enum DimensionType: String, CaseIterable, Codable, Identifiable {
 
     var id: String { rawValue }
 
+    // NOTE: the `.stress` case and rawValue "stress" are kept for data continuity. Its
+    // presentation is now Calm (high = better); higher always means better for all axes.
     var label: String {
         switch self {
         case .energy: return "Energy"
         case .focus: return "Focus"
-        case .stress: return "Stress"
+        case .stress: return "Calm"
         case .growth: return "Growth"
         }
     }
@@ -187,7 +211,7 @@ enum DimensionType: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .energy: return "Energy"
         case .focus: return "Focus"
-        case .stress: return "Stress"
+        case .stress: return "Calm"
         case .growth: return "Growth"
         }
     }
@@ -196,7 +220,7 @@ enum DimensionType: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .energy: return "sun.max.fill"
         case .focus: return "scope"
-        case .stress: return "bolt.heart.fill"
+        case .stress: return "wind"
         case .growth: return "leaf.fill"
         }
     }
@@ -205,14 +229,9 @@ enum DimensionType: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .energy: return "How's your energy today?"
         case .focus: return "How focused were you?"
-        case .stress: return "Stress level?"
+        case .stress: return "How calm did you feel?"
         case .growth: return "Did you grow today?"
         }
-    }
-
-    /// For stress, lower is better (inverted for composite scoring)
-    var isInverted: Bool {
-        self == .stress
     }
 }
 

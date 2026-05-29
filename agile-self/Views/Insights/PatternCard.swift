@@ -24,11 +24,15 @@ struct PatternCard: View {
                     .font(Theme.Typography.headline)
                     .foregroundStyle(Theme.Colors.textPrimary)
 
-                Text(description)
-                    .font(Theme.Typography.callout)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .lineSpacing(2)
+                // Only render the description row when there's text — patterns from Insights
+                // carry no description, and an empty Text would leave a dead gap.
+                if !description.isEmpty {
+                    Text(description)
+                        .font(Theme.Typography.callout)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineSpacing(2)
+                }
             }
         }
         .padding(Theme.Spacing.md)
@@ -41,7 +45,7 @@ struct PatternCard: View {
                 .frame(width: 3)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Pattern: \(title). \(description)")
+        .accessibilityLabel(description.isEmpty ? "Pattern: \(title)" : "Pattern: \(title). \(description)")
     }
 }
 
@@ -58,8 +62,8 @@ struct PatternCard: View {
             )
 
             PatternCard(
-                title: "Sleep affects stress",
-                description: "Sleep quality below 7h correlates with higher stress the next day."
+                title: "Sleep affects calm",
+                description: "Sleep below 7h tends to line up with lower calm the next day."
             )
 
             PatternCard(

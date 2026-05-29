@@ -15,48 +15,49 @@ struct CompositeScoreTests {
 
     @Test
     func defaultScores() {
-        let score = computeCompositeScore(energy: 5, focus: 5, stress: 5, growth: 5)
-        // invertedStress = 11 - 5 = 6; (5 + 5 + 6 + 5) / 4.0 = 5.25
-        #expect(score == 5.25)
+        let score = computeCompositeScore(energy: 3, focus: 3, calm: 3, growth: 3)
+        // Plain mean: (3 + 3 + 3 + 3) / 4.0 = 3.0 (neutral default)
+        #expect(score == 3.0)
     }
 
     @Test
     func allMaximum() {
-        let score = computeCompositeScore(energy: 10, focus: 10, stress: 1, growth: 10)
-        // invertedStress = 11 - 1 = 10; (10 + 10 + 10 + 10) / 4.0 = 10.0
-        #expect(score == 10.0)
+        let score = computeCompositeScore(energy: 5, focus: 5, calm: 5, growth: 5)
+        // (5 + 5 + 5 + 5) / 4.0 = 5.0
+        #expect(score == 5.0)
     }
 
     @Test
     func allMinimum() {
-        let score = computeCompositeScore(energy: 1, focus: 1, stress: 10, growth: 1)
-        // invertedStress = 11 - 10 = 1; (1 + 1 + 1 + 1) / 4.0 = 1.0
+        let score = computeCompositeScore(energy: 1, focus: 1, calm: 1, growth: 1)
+        // (1 + 1 + 1 + 1) / 4.0 = 1.0
         #expect(score == 1.0)
     }
 
     @Test
-    func stressInversion() {
-        let lowStress = computeCompositeScore(energy: 5, focus: 5, stress: 2, growth: 5)
-        let highStress = computeCompositeScore(energy: 5, focus: 5, stress: 9, growth: 5)
-        #expect(lowStress > highStress)
+    func calmRaisesComposite() {
+        // Higher calm (up = better) yields a higher composite.
+        let lowCalm = computeCompositeScore(energy: 3, focus: 3, calm: 1, growth: 3)
+        let highCalm = computeCompositeScore(energy: 3, focus: 3, calm: 5, growth: 3)
+        #expect(highCalm > lowCalm)
     }
 
     @Test
     func mixedValues() {
-        let score = computeCompositeScore(energy: 8, focus: 6, stress: 3, growth: 7)
-        // invertedStress = 11 - 3 = 8; (8 + 6 + 8 + 7) / 4.0 = 7.25
-        #expect(score == 7.25)
+        let score = computeCompositeScore(energy: 4, focus: 3, calm: 4, growth: 2)
+        // Plain mean: (4 + 3 + 4 + 2) / 4.0 = 3.25
+        #expect(score == 3.25)
     }
 
     @Test
     func scoreAlwaysInRange() {
-        for e in [1, 5, 10] {
-            for f in [1, 5, 10] {
-                for s in [1, 5, 10] {
-                    for g in [1, 5, 10] {
-                        let score = computeCompositeScore(energy: e, focus: f, stress: s, growth: g)
+        for e in [1, 3, 5] {
+            for f in [1, 3, 5] {
+                for c in [1, 3, 5] {
+                    for g in [1, 3, 5] {
+                        let score = computeCompositeScore(energy: e, focus: f, calm: c, growth: g)
                         #expect(score >= 1.0)
-                        #expect(score <= 10.0)
+                        #expect(score <= 5.0)
                     }
                 }
             }
@@ -65,10 +66,9 @@ struct CompositeScoreTests {
 
     @Test
     func symmetricScores() {
-        // When all dimensions have equal "effective" value, composite equals that value
-        // energy=7, focus=7, stress=4 (inverted=7), growth=7 -> all 7 -> composite = 7.0
-        let score = computeCompositeScore(energy: 7, focus: 7, stress: 4, growth: 7)
-        #expect(score == 7.0)
+        // When all four dimensions are equal, the composite equals that value.
+        let score = computeCompositeScore(energy: 4, focus: 4, calm: 4, growth: 4)
+        #expect(score == 4.0)
     }
 }
 
@@ -85,7 +85,8 @@ struct WatchDimensionTypeTests {
     func labels() {
         #expect(WatchDimensionType.energy.label == "Energy")
         #expect(WatchDimensionType.focus.label == "Focus")
-        #expect(WatchDimensionType.stress.label == "Stress")
+        // The 4th axis is reframed to Calm (enum case + rawValue stay "stress").
+        #expect(WatchDimensionType.stress.label == "Calm")
         #expect(WatchDimensionType.growth.label == "Growth")
     }
 
@@ -93,7 +94,7 @@ struct WatchDimensionTypeTests {
     func icons() {
         #expect(WatchDimensionType.energy.icon == "bolt.fill")
         #expect(WatchDimensionType.focus.icon == "eye.fill")
-        #expect(WatchDimensionType.stress.icon == "waveform.path.ecg")
+        #expect(WatchDimensionType.stress.icon == "wind")
         #expect(WatchDimensionType.growth.icon == "leaf.fill")
     }
 
@@ -239,10 +240,10 @@ struct WatchConnectivityManagerTests {
     func applyLocalState_computesCorrectScore() {
         let manager = WatchConnectivityManager()
 
-        manager.applyLocalState(energy: 8, focus: 7, stress: 3, growth: 9)
+        manager.applyLocalState(energy: 4, focus: 4, calm: 2, growth: 5)
 
-        // (8 + 7 + 8 + 9) / 4.0 = 8.0
-        #expect(manager.todayCompositeScore == 8.0)
+        // Plain mean: (4 + 4 + 2 + 5) / 4.0 = 3.75
+        #expect(manager.todayCompositeScore == 3.75)
         #expect(manager.didCheckInToday == true)
     }
 
@@ -250,9 +251,9 @@ struct WatchConnectivityManagerTests {
     func applyLocalState_matchesComputeFunction() {
         let manager = WatchConnectivityManager()
 
-        manager.applyLocalState(energy: 3, focus: 7, stress: 9, growth: 4)
+        manager.applyLocalState(energy: 3, focus: 4, calm: 5, growth: 2)
 
-        let expected = computeCompositeScore(energy: 3, focus: 7, stress: 9, growth: 4)
+        let expected = computeCompositeScore(energy: 3, focus: 4, calm: 5, growth: 2)
         #expect(manager.todayCompositeScore == expected)
     }
 
@@ -260,7 +261,7 @@ struct WatchConnectivityManagerTests {
     func applyLocalState_minScores() {
         let manager = WatchConnectivityManager()
 
-        manager.applyLocalState(energy: 1, focus: 1, stress: 10, growth: 1)
+        manager.applyLocalState(energy: 1, focus: 1, calm: 1, growth: 1)
 
         #expect(manager.todayCompositeScore == 1.0)
     }
@@ -269,9 +270,9 @@ struct WatchConnectivityManagerTests {
     func applyLocalState_maxScores() {
         let manager = WatchConnectivityManager()
 
-        manager.applyLocalState(energy: 10, focus: 10, stress: 1, growth: 10)
+        manager.applyLocalState(energy: 5, focus: 5, calm: 5, growth: 5)
 
-        #expect(manager.todayCompositeScore == 10.0)
+        #expect(manager.todayCompositeScore == 5.0)
     }
 }
 

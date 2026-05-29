@@ -40,7 +40,8 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
                 "day": index + 1,
                 "energy": checkIn.energyScore,
                 "focus": checkIn.focusScore,
-                "stress": checkIn.stressScore,
+                // Calm axis (high = calm/good); stored on-disk under stressScore.
+                "calm": checkIn.calmScore,
                 "growth": checkIn.growthScore,
                 "composite": checkIn.compositeScore,
             ]
@@ -72,77 +73,13 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
     nonisolated func generateDailyInsight(checkIn: DailyCheckIn) async throws -> String {
         // Daily insights are handled on-device; this is a fallback.
         let composite = checkIn.compositeScore
-        if composite >= 7.5 {
+        if composite >= 3.7 {
             return "Strong day across the board. Your consistency is building momentum."
-        } else if composite >= 5.5 {
+        } else if composite >= 2.8 {
             return "A balanced day. Look for small wins to build on tomorrow."
         } else {
             return "Everyone has off days. Focus on one small improvement tomorrow."
         }
-    }
-
-    nonisolated func generateWeeklyQuestions(
-        checkIns: [DailyCheckIn],
-        health: [HealthSnapshot]
-    ) async throws -> [String] {
-        // Phase 2: Send anonymized data to Gemini and parse structured questions.
-        // For now, return contextual placeholder questions.
-        let _ = anonymize(checkIns: checkIns)
-        let _ = anonymize(health: health)
-
-        let avgComposite = checkIns.isEmpty ? 5.0 :
-            checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
-
-        return [
-            "Your overall score this week was \(String(format: "%.1f", avgComposite)). What contributed most to this?",
-            "Which day felt like your peak performance? What made it different?",
-            "Were there any moments of unexpected stress this week?",
-            "How did your physical health (sleep, exercise) affect your mental state?",
-            "What's one habit you want to strengthen next week?",
-            "If you could change one thing about this week, what would it be?",
-        ]
-    }
-
-    nonisolated func generateWeeklySummary(
-        conversation: [ConversationMessage],
-        checkIns: [DailyCheckIn]
-    ) async throws -> WeeklySummaryResult {
-        // Phase 2: Send conversation + anonymized data to Gemini for deep analysis.
-        let avgComposite = checkIns.isEmpty ? 5.0 :
-            checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
-
-        // Extract themes from conversation (placeholder logic)
-        let userMessages = conversation.filter { $0.role == .user }.map(\.content)
-        let hasExerciseMention = userMessages.contains { $0.localizedCaseInsensitiveContains("run") || $0.localizedCaseInsensitiveContains("exercise") || $0.localizedCaseInsensitiveContains("workout") }
-
-        var wins = [
-            "Maintained a consistent check-in habit",
-            "Overall composite score: \(String(format: "%.1f", avgComposite))",
-        ]
-        if hasExerciseMention {
-            wins.append("Recognized the positive impact of physical activity")
-        }
-
-        var challenges = [String]()
-        let avgStress = checkIns.isEmpty ? 5.0 :
-            Double(checkIns.map(\.stressScore).reduce(0, +)) / Double(checkIns.count)
-        if avgStress >= 5.0 {
-            challenges.append("Stress management needs attention (avg \(String(format: "%.1f", avgStress))/10)")
-        }
-        if checkIns.count < 7 {
-            challenges.append("Missed \(7 - checkIns.count) day(s) of check-ins")
-        }
-
-        return WeeklySummaryResult(
-            wins: wins,
-            challenges: challenges,
-            summary: "A productive week with an average composite of \(String(format: "%.1f", avgComposite)). Your self-awareness through daily reflection is a strong foundation for growth.",
-            aiTakeaway: "Focus on the conditions that create your best days and try to replicate them consistently.",
-            suggestedActions: [
-                "Identify and protect your peak focus hours",
-                "Build a pre-sleep routine to improve recovery",
-            ]
-        )
     }
 
     nonisolated func generateMonthlyReport(
@@ -153,7 +90,7 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
         let _ = anonymize(checkIns: checkIns)
         let _ = anonymize(health: health)
 
-        let avgComposite = checkIns.isEmpty ? 5.0 :
+        let avgComposite = checkIns.isEmpty ? 3.0 :
             checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
 
         let correlations = [
@@ -171,9 +108,9 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
             ),
             Correlation(
                 factor1: "Screen Time",
-                factor2: "Stress",
-                coefficient: 0.54,
-                description: "Screen Time\u{2191} = Stress\u{2191}"
+                factor2: "Calm",
+                coefficient: -0.54,
+                description: "Screen Time\u{2191} = Calm\u{2193}"
             ),
         ]
 
@@ -181,6 +118,40 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
             executiveSummary: "This month demonstrated steady engagement with self-reflection. Your composite score averaged \(String(format: "%.1f", avgComposite)) across \(checkIns.count) check-ins. The data reveals meaningful correlations between your physical health metrics and mental performance.",
             topInsight: "Consistent exercise and sleep above 7 hours correlate with your best-performing days.",
             overallScore: avgComposite,
+            correlations: correlations
+        )
+    }
+
+    nonisolated func generatePatterns(from checkIns: [DailyCheckIn]) async throws -> [String] {
+        // Phase 2: derive patterns from anonymized data via Gemini.
+        _ = anonymize(checkIns: checkIns)
+        // Below the data threshold: return NO patterns (the Insights empty-state copy explains
+        // this) rather than a sentinel string that would render as a fake "pattern" card.
+        guard checkIns.count >= 7 else { return [] }
+        return [
+            "Focus tends to peak on your most active days.",
+            "On nights with better sleep, your Calm tends to run higher the next day.",
+            "A midweek energy dip recurs in your data.",
+        ]
+    }
+
+    /// Connections rely on deterministic correlation numbers, so this path mirrors the
+    /// on-device narrator (the cloud backend never invents the magnitudes).
+    nonisolated func generateConnections(
+        checkIns: [DailyCheckIn],
+        health: [HealthSnapshot]
+    ) async throws -> [String] {
+        ConnectionNarrator.connections(checkIns: checkIns, health: health)
+    }
+
+    nonisolated func generateTodayConnection(
+        checkIn: DailyCheckIn,
+        todayHealth: HealthSnapshot?,
+        correlations: [Correlation]
+    ) async throws -> String? {
+        ConnectionNarrator.todayConnection(
+            checkIn: checkIn,
+            todayHealth: todayHealth,
             correlations: correlations
         )
     }

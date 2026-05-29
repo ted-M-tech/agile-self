@@ -34,7 +34,9 @@ final class UserProfile {
     var checkInReminderHour: Int
     /// Minute component (0-59) for the daily check-in reminder. Default: 0.
     var checkInReminderMinute: Int
-    /// Day of week for the weekly review prompt. 1 = Sunday, 7 = Saturday. Default: 6 (Friday).
+    /// Dormant after the weekly-review feature was cut: retained to avoid a SwiftData migration
+    /// and to keep export/schema compatibility — it no longer schedules anything.
+    /// 1 = Sunday, 7 = Saturday. Default: 6 (Friday).
     var weeklyReviewDay: Int
     /// Current subscription tier.
     var subscriptionTier: SubscriptionTier

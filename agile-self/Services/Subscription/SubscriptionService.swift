@@ -23,6 +23,12 @@ final class SubscriptionService {
     var isLoading = false
     var errorMessage: String?
 
+    /// Invoked after entitlements are refreshed, with the current premium status.
+    /// Installed by `AppContainer` to keep `UserProfile.subscriptionTier` in sync.
+    /// `@ObservationIgnored`: it's a callback sink (not observable UI state), and the
+    /// `@Observable` macro can't synthesize a tracked accessor for a `@MainActor` closure type.
+    @ObservationIgnored var onEntitlementsChanged: (@MainActor (Bool) -> Void)?
+
     var isPremium: Bool {
         !purchasedProductIDs.isEmpty
     }
@@ -65,20 +71,29 @@ final class SubscriptionService {
 
     // MARK: - Purchase
 
-    func purchase(_ product: Product) async throws -> StoreKit.Transaction? {
+    /// The distinct outcomes the paywall must handle differently — collapsing `.pending`
+    /// (e.g. Ask to Buy / SCA) into `.userCancelled` previously made an approval-pending
+    /// purchase look like a silent cancel.
+    enum PurchaseResult {
+        case success
+        case pending
+        case cancelled
+    }
+
+    func purchase(_ product: Product) async throws -> PurchaseResult {
         let result = try await product.purchase()
         switch result {
         case .success(let verification):
             let transaction = try checkVerified(verification)
             await updatePurchasedProducts()
             await transaction.finish()
-            return transaction
+            return .success
         case .userCancelled:
-            return nil
+            return .cancelled
         case .pending:
-            return nil
+            return .pending
         @unknown default:
-            return nil
+            return .cancelled
         }
     }
 
@@ -99,6 +114,7 @@ final class SubscriptionService {
             }
         }
         purchasedProductIDs = purchased
+        onEntitlementsChanged?(!purchased.isEmpty)
     }
 
     // MARK: - Transaction Listener

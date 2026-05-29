@@ -26,9 +26,28 @@ struct PaywallView: View {
     @State private var selectedPlan: PlanType = .yearly
     @State private var isPurchasing: Bool = false
     @State private var purchaseError: String?
+    /// Neutral (non-error) status, e.g. a pending purchase or "no purchases to restore".
+    @State private var purchaseInfo: String?
 
     private var subscriptionService: SubscriptionService {
         appContainer.subscriptionService
+    }
+
+    /// Per-month equivalent of the yearly plan, derived from the real product price.
+    /// Empty until the product loads — never a hardcoded (possibly wrong-currency) literal.
+    private var yearlyMonthlyEquivalent: String {
+        guard let yearly = subscriptionService.yearlyProduct else { return "" }
+        let perMonth = yearly.price / 12
+        return perMonth.formatted(yearly.priceFormatStyle) + "/mo"
+    }
+
+    /// Price placeholder shown before StoreKit products load. A neutral dash avoids showing a
+    /// hardcoded ¥ amount to users in other currencies (the real displayPrice is locale-correct).
+    private static let pricePlaceholder = "\u{2014}"
+
+    /// The StoreKit product backing the selected plan (nil until products load).
+    private var selectedProduct: Product? {
+        selectedPlan == .yearly ? subscriptionService.yearlyProduct : subscriptionService.monthlyProduct
     }
 
     var body: some View {
@@ -36,13 +55,18 @@ struct PaywallView: View {
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
                     headerSection
-                    featureComparisonSection
+                    benefitsSection
                     pricingSection
                     subscribeButton
                     if let error = purchaseError {
                         Text(error)
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.error)
+                            .multilineTextAlignment(.center)
+                    } else if let info = purchaseInfo {
+                        Text(info)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
                             .multilineTextAlignment(.center)
                     }
                     restoreLink
@@ -68,6 +92,12 @@ struct PaywallView: View {
             .task {
                 await subscriptionService.loadProducts()
             }
+            .onChange(of: subscriptionService.isPremium) { _, isPremium in
+                // Auto-close once entitlement is granted — covers a pending (Ask to Buy / SCA)
+                // purchase that resolves later via the transaction listener, so the user isn't
+                // left staring at a stale "pending approval" message on an open paywall.
+                if isPremium { dismiss() }
+            }
         }
         .preferredColorScheme(.dark)
     }
@@ -91,11 +121,11 @@ struct PaywallView: View {
                 )
                 .accessibilityHidden(true)
 
-            Text("Unlock Premium")
+            Text("Become a Supporter")
                 .font(Theme.Typography.display)
                 .gradientText()
 
-            Text("Get the most out of your growth journey")
+            Text("Every feature is already yours. Premium keeps Agile Self growing.")
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -103,52 +133,20 @@ struct PaywallView: View {
         .frame(maxWidth: .infinity)
         .padding(.bottom, Theme.Spacing.sm)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Unlock Premium. Get the most out of your growth journey.")
+        .accessibilityLabel("Become a Supporter. Every feature is already yours. Premium keeps Agile Self growing.")
     }
 
-    // MARK: - Feature Comparison
+    // MARK: - Benefits
 
-    private var featureComparisonSection: some View {
+    private var benefitsSection: some View {
         VStack(spacing: 0) {
-            // Column headers
-            HStack {
-                Text("Features")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+            ForEach(Array(benefitRows.enumerated()), id: \.offset) { index, benefit in
+                benefitRow(benefit)
 
-                Spacer()
-
-                Text("Free")
-                    .font(Theme.Typography.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .frame(width: 64)
-
-                Text("Premium")
-                    .font(Theme.Typography.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Theme.Colors.accentEnd)
-                    .frame(width: 80)
-            }
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.md)
-
-            Divider()
-                .overlay(Theme.Colors.divider)
-
-            // Feature rows
-            ForEach(Array(featureRows.enumerated()), id: \.offset) { index, feature in
-                featureRow(
-                    name: feature.name,
-                    icon: feature.icon,
-                    freeValue: feature.freeValue,
-                    premiumValue: feature.premiumValue
-                )
-
-                if index < featureRows.count - 1 {
+                if index < benefitRows.count - 1 {
                     Divider()
                         .overlay(Theme.Colors.divider)
-                        .padding(.leading, Theme.Spacing.md + 24 + Theme.Spacing.sm)
+                        .padding(.leading, Theme.Spacing.md + 28 + Theme.Spacing.md)
                 }
             }
         }
@@ -156,55 +154,30 @@ struct PaywallView: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
     }
 
-    private func featureRow(
-        name: String,
-        icon: String,
-        freeValue: FeatureValue,
-        premiumValue: FeatureValue
-    ) -> some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .frame(width: 24, height: 24)
+    private func benefitRow(_ benefit: BenefitRowData) -> some View {
+        HStack(spacing: Theme.Spacing.md) {
+            Image(systemName: benefit.icon)
+                .font(.callout)
+                .foregroundStyle(Theme.Colors.accentEnd)
+                .frame(width: 28, height: 28)
 
-            Text(name)
-                .font(Theme.Typography.callout)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(benefit.title)
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+
+                Text(benefit.detail)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Spacer()
-
-            featureValueView(freeValue, isPremium: false)
-                .frame(width: 64)
-
-            featureValueView(premiumValue, isPremium: true)
-                .frame(width: 80)
         }
         .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.sm + 2)
+        .padding(.vertical, Theme.Spacing.md)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(name). Free: \(freeValue.accessibilityText). Premium: \(premiumValue.accessibilityText)")
-    }
-
-    @ViewBuilder
-    private func featureValueView(_ value: FeatureValue, isPremium: Bool) -> some View {
-        switch value {
-        case .check:
-            Image(systemName: "checkmark")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(isPremium ? Theme.Colors.accentEnd : Theme.Colors.success)
-
-        case .limited(let text):
-            Text(text)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(isPremium ? Theme.Colors.accentEnd : Theme.Colors.textTertiary)
-
-        case .unavailable:
-            Text("\u{2014}")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary.opacity(0.5))
-        }
+        .accessibilityLabel("\(benefit.title). \(benefit.detail)")
     }
 
     // MARK: - Pricing Section
@@ -216,7 +189,7 @@ struct PaywallView: View {
                 pricingCard(
                     plan: .monthly,
                     title: "Monthly",
-                    price: subscriptionService.monthlyProduct?.displayPrice ?? "\u{00A5}480",
+                    price: subscriptionService.monthlyProduct?.displayPrice ?? Self.pricePlaceholder,
                     period: "/month",
                     badge: nil
                 )
@@ -225,7 +198,7 @@ struct PaywallView: View {
                 pricingCard(
                     plan: .yearly,
                     title: "Yearly",
-                    price: subscriptionService.yearlyProduct?.displayPrice ?? "\u{00A5}3,800",
+                    price: subscriptionService.yearlyProduct?.displayPrice ?? Self.pricePlaceholder,
                     period: "/year",
                     badge: "34% OFF"
                 )
@@ -286,7 +259,7 @@ struct PaywallView: View {
                 }
 
                 if plan == .yearly {
-                    Text("\u{00A5}317/mo")
+                    Text(yearlyMonthlyEquivalent)
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 } else {
@@ -328,7 +301,7 @@ struct PaywallView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(title) plan, \(price) \(period)")
+        .accessibilityLabel(price == Self.pricePlaceholder ? "\(title) plan, price loading" : "\(title) plan, \(price) \(period)")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .accessibilityHint("Double tap to select this plan")
@@ -341,6 +314,7 @@ struct PaywallView: View {
             Task {
                 isPurchasing = true
                 purchaseError = nil
+                purchaseInfo = nil
                 let product: Product? = selectedPlan == .yearly
                     ? subscriptionService.yearlyProduct
                     : subscriptionService.monthlyProduct
@@ -350,9 +324,14 @@ struct PaywallView: View {
                     return
                 }
                 do {
-                    let transaction = try await subscriptionService.purchase(product)
-                    if transaction != nil {
+                    switch try await subscriptionService.purchase(product) {
+                    case .success:
                         dismiss()
+                    case .pending:
+                        // e.g. Ask to Buy / Strong Customer Authentication — not a failure.
+                        purchaseInfo = "Your purchase is pending approval. Premium unlocks automatically once it's approved."
+                    case .cancelled:
+                        break // user backed out; no message
                     }
                 } catch {
                     purchaseError = "Purchase failed. Please try again."
@@ -370,10 +349,10 @@ struct PaywallView: View {
             }
             .primaryButtonStyle()
         }
-        .disabled(isPurchasing)
-        .opacity(isPurchasing ? 0.7 : 1.0)
+        .disabled(isPurchasing || selectedProduct == nil)
+        .opacity((isPurchasing || selectedProduct == nil) ? 0.6 : 1.0)
         .accessibilityLabel("Subscribe to \(selectedPlan == .yearly ? "yearly" : "monthly") plan")
-        .accessibilityHint("Begins the purchase process")
+        .accessibilityHint(selectedProduct == nil ? "Prices are still loading" : "Begins the purchase process")
     }
 
     // MARK: - Restore Link
@@ -381,9 +360,13 @@ struct PaywallView: View {
     private var restoreLink: some View {
         Button {
             Task {
+                purchaseError = nil
+                purchaseInfo = nil
                 await subscriptionService.restorePurchases()
                 if subscriptionService.isPremium {
                     dismiss()
+                } else {
+                    purchaseInfo = "No previous purchases found to restore."
                 }
             }
         } label: {
@@ -422,40 +405,33 @@ struct PaywallView: View {
     }
 }
 
-// MARK: - Feature Data
+// MARK: - Benefit Data
 
-private enum FeatureValue {
-    case check
-    case limited(String)
-    case unavailable
-
-    var accessibilityText: String {
-        switch self {
-        case .check: return "Available"
-        case .limited(let text): return text
-        case .unavailable: return "Not available"
-        }
-    }
-}
-
-private struct FeatureRowData {
-    let name: String
+private struct BenefitRowData {
     let icon: String
-    let freeValue: FeatureValue
-    let premiumValue: FeatureValue
+    let title: String
+    let detail: String
 }
 
-private let featureRows: [FeatureRowData] = [
-    FeatureRowData(name: "Daily Check-in", icon: "checkmark.circle", freeValue: .check, premiumValue: .check),
-    FeatureRowData(name: "Health Data", icon: "heart.fill", freeValue: .check, premiumValue: .check),
-    FeatureRowData(name: "AI Daily Insight", icon: "sparkles", freeValue: .check, premiumValue: .check),
-    FeatureRowData(name: "Weekly AI Review", icon: "bubble.left.and.text.bubble.right", freeValue: .limited("2/month"), premiumValue: .check),
-    FeatureRowData(name: "Monthly Report", icon: "doc.text.fill", freeValue: .limited("Summary"), premiumValue: .check),
-    FeatureRowData(name: "Trend Charts", icon: "chart.xyaxis.line", freeValue: .limited("7 days"), premiumValue: .check),
-    FeatureRowData(name: "Correlations", icon: "arrow.triangle.branch", freeValue: .unavailable, premiumValue: .check),
-    FeatureRowData(name: "Actions", icon: "checklist", freeValue: .limited("3 max"), premiumValue: .check),
-    FeatureRowData(name: "Widgets", icon: "rectangle.on.rectangle", freeValue: .limited("Small"), premiumValue: .check),
-    FeatureRowData(name: "Export", icon: "square.and.arrow.up", freeValue: .unavailable, premiumValue: .check),
+// Honest framing: nothing is locked. Every feature ships to everyone today; Premium is an
+// optional supporter tier that funds development and is where future premium-only
+// capabilities will live. Do NOT advertise limits that the app does not enforce.
+private let benefitRows: [BenefitRowData] = [
+    BenefitRowData(
+        icon: "checkmark.seal.fill",
+        title: "Everything, included",
+        detail: "Check-ins, health insights, connections, reports, charts, and widgets — all of it."
+    ),
+    BenefitRowData(
+        icon: "heart.fill",
+        title: "Support an indie developer",
+        detail: "Agile Self is built by one person. Your subscription keeps the lights on."
+    ),
+    BenefitRowData(
+        icon: "sparkles",
+        title: "Early access to new features",
+        detail: "Help shape what comes next and try new capabilities first."
+    ),
 ]
 
 // MARK: - Preview

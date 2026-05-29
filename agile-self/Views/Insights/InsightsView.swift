@@ -16,12 +16,34 @@ enum TimePeriod: String, CaseIterable {
     case month = "Month"
     case quarter = "Quarter"
     case year = "Year"
+
+    /// Number of days the filtering window spans, inclusive of today.
+    /// `nil` means "all time" (no lower bound).
+    var windowDays: Int? {
+        switch self {
+        case .week: return 7
+        case .month: return 30
+        case .quarter: return 90
+        case .year: return nil
+        }
+    }
+
+    /// The inclusive lower-bound date (stripped to midnight) for this period,
+    /// computed relative to `reference`. Check-ins whose `date` is `>= start`
+    /// belong to the window. Returns `nil` for `.year` (no lower bound).
+    func startDate(
+        relativeTo reference: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Date? {
+        guard let days = windowDays else { return nil }
+        let today = calendar.startOfDay(for: reference)
+        return calendar.date(byAdding: .day, value: -(days - 1), to: today)
+    }
 }
 
 // MARK: - Insights View
 
 struct InsightsView: View {
-    var onShowWeeklyReview: (() -> Void)?
     var onShowMonthlyReport: (() -> Void)?
 
     @Environment(AppContainer.self) private var appContainer
@@ -33,9 +55,8 @@ struct InsightsView: View {
 
     // MARK: - UI State
 
-    @State private var selectedPeriod: TimePeriod = .month
+    @State private var selectedPeriod: TimePeriod = .week
     @State private var activeDimensions: Set<DimensionType> = []
-    @State private var animateChart = false
 
     /// Check-ins filtered by the selected time period.
     private var filteredCheckIns: [DailyCheckIn] {
@@ -47,15 +68,16 @@ struct InsightsView: View {
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
                     if let error = viewModel.errorMessage {
-                        insightsErrorView(message: error)
+                        ErrorStateView(message: error) {
+                            viewModel.loadData(context: modelContext)
+                        }
                     } else if viewModel.isLoading {
                         insightsLoadingView
                     } else if viewModel.allCheckIns.isEmpty {
                         insightsEmptyView
                     } else {
-                        periodPicker
                         scoreTrendSection
-                        correlationsSection
+                        connectionsSection
                         patternsSection
                         streakSection
                         reviewActionsSection
@@ -67,11 +89,6 @@ struct InsightsView: View {
             .background(Theme.Colors.backgroundPrimary.ignoresSafeArea())
             .navigationTitle("Insights")
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .onAppear {
-                withAnimation(Theme.Animation.trendLineDraw) {
-                    animateChart = true
-                }
-            }
             .task {
                 viewModel.configure(
                     aiService: appContainer.aiService,
@@ -80,6 +97,7 @@ struct InsightsView: View {
                 )
                 viewModel.loadData(context: modelContext)
                 await viewModel.loadPatterns()
+                await viewModel.loadConnections()
             }
             .onChange(of: selectedPeriod) { _, newValue in
                 viewModel.selectedPeriod = newValue
@@ -99,35 +117,6 @@ struct InsightsView: View {
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textTertiary)
             Spacer(minLength: 100)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - Error State
-
-    private func insightsErrorView(message: String) -> some View {
-        VStack(spacing: Theme.Spacing.md) {
-            Spacer(minLength: 80)
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 40))
-                .foregroundStyle(Theme.Colors.warning)
-
-            Text("Something went wrong")
-                .font(Theme.Typography.headline)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            Text(message)
-                .font(Theme.Typography.callout)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-
-            Button {
-                viewModel.loadData(context: modelContext)
-            } label: {
-                Text("Try Again")
-                    .secondaryButtonStyle()
-            }
-            Spacer(minLength: 80)
         }
         .frame(maxWidth: .infinity)
     }
@@ -173,8 +162,16 @@ struct InsightsView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(title: "SCORE TREND", icon: "chart.xyaxis.line")
 
-            // Main chart
-            scoreChart
+            // The period control lives inside this card so it clearly scopes to the trend chart
+            // only — Connections, Patterns, and Streak below are all-time by nature.
+            periodPicker
+
+            // Main chart (or a hint when there is nothing to plot yet)
+            if filteredCheckIns.count <= 1 {
+                singlePointChart
+            } else {
+                scoreChart
+            }
 
             // Dimension toggles
             dimensionLegend
@@ -182,12 +179,28 @@ struct InsightsView: View {
         .cardStyle()
     }
 
+    /// Dates actually being plotted, for pinning the x-domain / stride.
+    private var chartDates: [Date] { filteredCheckIns.map(\.date) }
+
+    /// Spoken summary of the trend for VoiceOver (the chart marks themselves aren't readable).
+    private var chartAccessibilitySummary: String {
+        let scores = filteredCheckIns.map(\.compositeScore)
+        guard let latest = scores.last, let lo = scores.min(), let hi = scores.max() else {
+            return "No data yet."
+        }
+        return String(
+            format: "Latest %.1f out of 5 across %d check-ins, ranging %.1f to %.1f.",
+            latest, filteredCheckIns.count, lo, hi
+        )
+    }
+
     private var scoreChart: some View {
         Chart {
             ForEach(filteredCheckIns, id: \.id) { checkIn in
-                if animateChart {
-                    // Area fill under composite line
-                    AreaMark(
+                // Marks are drawn unconditionally (no entrance-animation gate) so the chart is
+                // never blank for Reduce Motion / VoiceOver users or on a view reuse.
+                // Area fill under composite line
+                AreaMark(
                         x: .value("Day", checkIn.date, unit: .day),
                         y: .value("Score", checkIn.compositeScore)
                     )
@@ -212,6 +225,14 @@ struct InsightsView: View {
                     .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
                     .interpolationMethod(.catmullRom)
 
+                    // Always-visible composite point so sparse data is legible.
+                    PointMark(
+                        x: .value("Day", checkIn.date, unit: .day),
+                        y: .value("Score", checkIn.compositeScore)
+                    )
+                    .foregroundStyle(Theme.Colors.accentStart)
+                    .symbolSize(18)
+
                     // Optional dimension overlays
                     ForEach(Array(activeDimensions), id: \.self) { dimension in
                         LineMark(
@@ -223,11 +244,11 @@ struct InsightsView: View {
                         .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [5, 3]))
                         .interpolationMethod(.catmullRom)
                     }
-                }
             }
         }
+        .chartXScale(domain: ChartAxis.dateDomain(for: chartDates))
         .chartXAxis {
-            AxisMarks(values: .automatic) { value in
+            AxisMarks(values: .stride(by: .day, count: ChartAxis.dayStride(for: chartDates, desiredCount: 6))) { value in
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
                         Text(date.formatted(xAxisFormat))
@@ -238,7 +259,7 @@ struct InsightsView: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading, values: [2, 4, 6, 8, 10]) { value in
+            AxisMarks(position: .leading, values: [1, 2, 3, 4, 5]) { value in
                 AxisValueLabel {
                     if let intValue = value.as(Int.self) {
                         Text("\(intValue)")
@@ -250,8 +271,59 @@ struct InsightsView: View {
                     .foregroundStyle(Theme.Colors.divider)
             }
         }
-        .chartYScale(domain: 1...10)
+        .chartYScale(domain: 1...5)
         .frame(height: 200)
+        .accessibilityElement()
+        .accessibilityLabel("Composite score trend")
+        .accessibilityValue(chartAccessibilitySummary)
+    }
+
+    /// 0–1 points: a line/area is invisible. Show the single point (if any) on a
+    /// pinned axis with a hint, instead of a broken-looking empty chart.
+    private var singlePointChart: some View {
+        VStack(spacing: Theme.Spacing.sm) {
+            Chart {
+                ForEach(filteredCheckIns, id: \.id) { checkIn in
+                    PointMark(
+                        x: .value("Day", checkIn.date, unit: .day),
+                        y: .value("Score", checkIn.compositeScore)
+                    )
+                    .foregroundStyle(Theme.Colors.accentStart)
+                    .symbolSize(60)
+                }
+            }
+            .chartXScale(domain: ChartAxis.dateDomain(for: chartDates))
+            .chartXAxis {
+                AxisMarks(values: chartDates) { value in
+                    AxisValueLabel {
+                        if let date = value.as(Date.self) {
+                            Text(date.formatted(xAxisFormat))
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading, values: [1, 2, 3, 4, 5]) { value in
+                    AxisValueLabel {
+                        if let intValue = value.as(Int.self) {
+                            Text("\(intValue)")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                        }
+                    }
+                    AxisGridLine()
+                        .foregroundStyle(Theme.Colors.divider)
+                }
+            }
+            .chartYScale(domain: 1...5)
+            .frame(height: 200)
+
+            Text("Keep checking in to see your trend")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
     }
 
     /// Date format adapts to the selected period.
@@ -311,26 +383,39 @@ struct InsightsView: View {
             }
         }
         .buttonStyle(.plain)
+        // Expand the hit target to the 44pt minimum without enlarging the visible dot+label.
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
         .disabled(!isToggleable)
         .accessibilityLabel("\(label) dimension")
         .accessibilityAddTraits(isToggleable ? .isButton : .isStaticText)
         .accessibilityValue(isActive ? "visible" : "hidden")
     }
 
-    // MARK: - Correlations Section
+    // MARK: - Connections Section
 
-    private var correlationsSection: some View {
+    /// AI-narrated, honest "Connections" between health metrics and how the user feels —
+    /// replaces the over-promising bare-coefficient correlation list.
+    private var connectionsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            sectionHeader(title: "HEALTH CORRELATIONS", icon: "arrow.triangle.branch")
+            sectionHeader(title: "CONNECTIONS", icon: "wand.and.stars")
 
-            if viewModel.correlations.isEmpty {
-                Text("Correlations will appear once enough data is collected.")
+            if viewModel.connections.isEmpty {
+                // Honest waiting state — correlation needs ~a week of matched check-in + Health data.
+                Text("Keep checking in with Apple Health connected — after about a week I'll start showing how your sleep, steps, and activity line up with how you feel.")
                     .font(Theme.Typography.callout)
                     .foregroundStyle(Theme.Colors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineSpacing(3)
                     .padding(.vertical, Theme.Spacing.md)
             } else {
-                ForEach(viewModel.correlations) { correlation in
-                    CorrelationCard(correlation: correlation)
+                // The narrator builds connections from `correlations.prefix(3)` in order, so the
+                // i-th sentence aligns with the i-th correlation for the supporting arrow.
+                ForEach(Array(viewModel.connections.enumerated()), id: \.offset) { index, sentence in
+                    ConnectionCard(
+                        sentence: sentence,
+                        correlation: index < viewModel.correlations.count ? viewModel.correlations[index] : nil
+                    )
                 }
             }
         }
@@ -420,37 +505,6 @@ struct InsightsView: View {
 
     private var reviewActionsSection: some View {
         VStack(spacing: Theme.Spacing.md) {
-            if let onShowWeeklyReview {
-                Button(action: onShowWeeklyReview) {
-                    HStack(spacing: Theme.Spacing.md) {
-                        Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                            .font(.title3)
-                            .foregroundStyle(Theme.Dimension.focus)
-
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                            Text("Weekly AI Review")
-                                .font(Theme.Typography.headline)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-
-                            Text("Reflect on your week with AI coaching")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                    }
-                    .padding(Theme.Spacing.md)
-                    .background(Theme.Colors.backgroundSecondary)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Start Weekly AI Review")
-            }
-
             if let onShowMonthlyReport {
                 Button(action: onShowMonthlyReport) {
                     HStack(spacing: Theme.Spacing.md) {
@@ -497,6 +551,7 @@ struct InsightsView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .tracking(1.2)
+                .accessibilityAddTraits(.isHeader)
 
             Spacer()
         }

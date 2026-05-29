@@ -8,12 +8,11 @@
 import Foundation
 import WatchConnectivity
 
-/// Computes the composite score from the four dimension scores.
-/// Stress is inverted (11 - stress) so lower stress contributes positively.
-/// This matches the formula in DailyCheckIn.compositeScore on the iOS side.
-func computeCompositeScore(energy: Int, focus: Int, stress: Int, growth: Int) -> Double {
-    let invertedStress = 11 - stress
-    return Double(energy + focus + invertedStress + growth) / 4.0
+/// Computes the composite score from the four dimension scores: a plain average (each 1-5,
+/// higher = better). The 4th axis is Calm (high = calm/good). This matches the formula in
+/// DailyCheckIn.compositeScore on the iOS side.
+func computeCompositeScore(energy: Int, focus: Int, calm: Int, growth: Int) -> Double {
+    Double(energy + focus + calm + growth) / 4.0
 }
 
 @Observable
@@ -44,12 +43,14 @@ final class WatchConnectivityManager: NSObject {
 
     // MARK: - Send Check-In
 
-    func sendCheckIn(energy: Int, focus: Int, stress: Int, growth: Int) {
+    func sendCheckIn(energy: Int, focus: Int, calm: Int, growth: Int) {
+        // The wire key is kept as "stress" for protocol stability; it now carries the
+        // calm-oriented value (high = calm) which the phone stores under stressScore.
         let payload: [String: Any] = [
             "type": "checkIn",
             "energy": energy,
             "focus": focus,
-            "stress": stress,
+            "stress": calm,
             "growth": growth,
             "timestamp": Date().timeIntervalSince1970
         ]
@@ -57,7 +58,7 @@ final class WatchConnectivityManager: NSObject {
         guard let session, session.isReachable else {
             // Fallback: queue for delivery when iPhone becomes reachable
             session?.transferUserInfo(payload)
-            applyLocalState(energy: energy, focus: focus, stress: stress, growth: growth)
+            applyLocalState(energy: energy, focus: focus, calm: calm, growth: growth)
             return
         }
 
@@ -69,7 +70,7 @@ final class WatchConnectivityManager: NSObject {
             // Fallback to transferUserInfo on error
             self?.session?.transferUserInfo(payload)
             Task { @MainActor in
-                self?.applyLocalState(energy: energy, focus: focus, stress: stress, growth: growth)
+                self?.applyLocalState(energy: energy, focus: focus, calm: calm, growth: growth)
             }
         })
     }
@@ -86,8 +87,8 @@ final class WatchConnectivityManager: NSObject {
         didCheckInToday = true
     }
 
-    func applyLocalState(energy: Int, focus: Int, stress: Int, growth: Int) {
-        todayCompositeScore = computeCompositeScore(energy: energy, focus: focus, stress: stress, growth: growth)
+    func applyLocalState(energy: Int, focus: Int, calm: Int, growth: Int) {
+        todayCompositeScore = computeCompositeScore(energy: energy, focus: focus, calm: calm, growth: growth)
         didCheckInToday = true
     }
 }

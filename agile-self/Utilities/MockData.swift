@@ -40,14 +40,15 @@ enum MockData {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
 
-        let scores: [(energy: Int, focus: Int, stress: Int, growth: Int, note: String?, insight: String?)] = [
-            (6, 5, 6, 5, nil, nil),
-            (7, 6, 4, 6, nil, nil),
-            (5, 7, 5, 7, nil, nil),
-            (6, 6, 5, 6, nil, nil),
-            (8, 7, 3, 8, nil, nil),
-            (7, 8, 4, 7, nil, nil),
-            (8, 7, 3, 9,
+        // 3rd value is Calm (high = calm/good), stored under stressScore. Scores are 1–5.
+        let scores: [(energy: Int, focus: Int, calm: Int, growth: Int, note: String?, insight: String?)] = [
+            (3, 3, 3, 3, nil, nil),
+            (4, 3, 4, 3, nil, nil),
+            (3, 4, 3, 4, nil, nil),
+            (3, 3, 3, 3, nil, nil),
+            (4, 4, 4, 4, nil, nil),
+            (4, 4, 4, 4, nil, nil),
+            (4, 4, 5, 5,
              "Great day! Finished the design spec and went for a run.",
              "Your focus tends to dip on Wednesdays. Consider a midweek reset ritual."),
         ]
@@ -58,7 +59,7 @@ enum MockData {
                 date: date,
                 energyScore: s.energy,
                 focusScore: s.focus,
-                stressScore: s.stress,
+                stressScore: s.calm,
                 growthScore: s.growth,
                 note: s.note,
                 dailyInsight: s.insight,
@@ -74,17 +75,18 @@ enum MockData {
 
         return (0..<30).map { daysAgo in
             let date = calendar.date(byAdding: .day, value: -(29 - daysAgo), to: today)!
-            // Generate plausible scores with some variance
-            let baseEnergy = 6 + (daysAgo % 3)
-            let baseFocus = 5 + (daysAgo % 4)
-            let baseStress = 3 + (daysAgo % 5)
-            let baseGrowth = 6 + (daysAgo % 3)
+            // Generate plausible 1–5 scores with some variance. baseCalm is the Calm axis
+            // (high = good), stored under stressScore.
+            let baseEnergy = 3 + (daysAgo % 2)
+            let baseFocus = 2 + (daysAgo % 3)
+            let baseCalm = 3 + (daysAgo % 2)
+            let baseGrowth = 3 + (daysAgo % 2)
             return DailyCheckIn(
                 date: date,
-                energyScore: min(baseEnergy, 10),
-                focusScore: min(baseFocus, 10),
-                stressScore: min(baseStress, 10),
-                growthScore: min(baseGrowth, 10),
+                energyScore: min(baseEnergy, 5),
+                focusScore: min(baseFocus, 5),
+                stressScore: min(baseCalm, 5),
+                growthScore: min(baseGrowth, 5),
                 createdAt: date
             )
         }
@@ -112,16 +114,16 @@ enum MockData {
         let report = MonthlyReport(
             month: 2,
             year: 2026,
-            executiveSummary: "February has been a month of steady growth. Your composite score improved from 6.2 (Week 1) to 7.4 (Week 4), driven primarily by increased exercise frequency and better sleep consistency. The biggest area for improvement remains stress management, particularly on meeting-heavy days.",
-            topInsight: "Running 3+ times per week correlates with a 23% higher focus score and 31% lower stress.",
-            overallScore: 7.1,
+            executiveSummary: "February has been a month of steady growth. Your composite score climbed from 3.6 (Week 1) to 4.1 (Week 4), driven by more consistent exercise and better sleep. The biggest opportunity is staying calm on meeting-heavy days.",
+            topInsight: "Running 3+ times per week lines up with a 23% higher focus score and steadier calm.",
+            overallScore: 4.1,
             isGenerated: true,
             generatedAt: Date()
         )
         report.setCorrelations([
             Correlation(factor1: "Sleep", factor2: "Focus", coefficient: 0.72, description: "Sleep\u{2191} = Focus\u{2191}"),
             Correlation(factor1: "Exercise", factor2: "Energy", coefficient: 0.68, description: "Exercise\u{2191} = Energy\u{2191}"),
-            Correlation(factor1: "Screen Time", factor2: "Stress", coefficient: 0.54, description: "Screen Time\u{2191} = Stress\u{2191}"),
+            Correlation(factor1: "Screen Time", factor2: "Calm", coefficient: -0.54, description: "Screen Time\u{2191} = Calm\u{2193}"),
             Correlation(factor1: "Running", factor2: "Growth", coefficient: 0.61, description: "Running\u{2191} = Growth\u{2191}"),
         ])
         return report
@@ -207,14 +209,15 @@ enum MockData {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
 
-        let scores: [(energy: Int, focus: Int, stress: Int, growth: Int)] = [
-            (6, 5, 6, 5),
-            (7, 6, 4, 6),
-            (5, 7, 5, 7),
-            (6, 6, 5, 6),
-            (8, 7, 3, 8),
-            (7, 8, 4, 7),
-            (8, 7, 3, 9),
+        // 3rd value is Calm (high = calm/good), stored under stressScore. Scores are 1–5.
+        let scores: [(energy: Int, focus: Int, calm: Int, growth: Int)] = [
+            (3, 3, 3, 3),
+            (4, 3, 4, 3),
+            (3, 4, 3, 4),
+            (3, 3, 3, 3),
+            (4, 4, 4, 4),
+            (4, 4, 4, 4),
+            (4, 4, 5, 5),
         ]
 
         for (index, s) in scores.enumerated() {
@@ -223,7 +226,7 @@ enum MockData {
                 date: date,
                 energyScore: s.energy,
                 focusScore: s.focus,
-                stressScore: s.stress,
+                stressScore: s.calm,
                 growthScore: s.growth,
                 note: index == 6 ? "Great day! Finished the design spec and went for a run." : nil,
                 dailyInsight: index == 6 ? "Your focus tends to dip on Wednesdays. Consider a midweek reset ritual." : nil,
@@ -258,46 +261,13 @@ enum MockData {
             context.insert(snapshot)
         }
 
-        // Insert weekly review
-        let weekStart = calendar.date(byAdding: .day, value: -6, to: today)!
-        let weekEnd = today
-
-        let review = WeeklyReview(
-            weekStart: weekStart,
-            weekEnd: weekEnd,
-            wins: [
-                "Maintained a 12-day check-in streak",
-                "Focus scores improved by 18% vs last week",
-                "Ran 3 times this week (11km total)",
-            ],
-            challenges: [
-                "Stress spiked on Wednesday - back-to-back meetings",
-                "Screen time exceeded 3h on 4 of 7 days",
-            ],
-            summary: "A strong week overall. Your consistency is paying off with steady improvements across all dimensions. The midweek stress spike is a pattern worth addressing.",
-            aiTakeaway: "Try blocking 30 minutes of no-meeting time on Wednesdays. Your data shows a clear focus-stress correlation on meeting-heavy days.",
-            isCompleted: true,
-            completedAt: Date()
-        )
-
-        let messages: [ConversationMessage] = [
-            ConversationMessage(role: .assistant, content: "Great week, Tetsuya! Your overall score averaged 7.4 - that's up from 6.8 last week. What do you think drove the improvement?"),
-            ConversationMessage(role: .user, content: "I think running regularly helped my energy a lot"),
-            ConversationMessage(role: .assistant, content: "The data supports that. On days you ran, your energy was 1.8 points higher on average. Your focus also improved by 1.2 points on run days. Want to set a running target for next week?"),
-            ConversationMessage(role: .user, content: "Yes, I'd like to run at least 3 times"),
-            ConversationMessage(role: .assistant, content: "Perfect. I noticed your stress peaked on Wednesday (7/10). What happened?"),
-            ConversationMessage(role: .user, content: "Back-to-back meetings all day, no breaks"),
-        ]
-        review.setConversations(messages)
-        context.insert(review)
-
         // Insert monthly report
         let report = MonthlyReport(
             month: 2,
             year: 2026,
-            executiveSummary: "February has been a month of steady growth. Your composite score improved from 6.2 (Week 1) to 7.4 (Week 4), driven primarily by increased exercise frequency and better sleep consistency. The biggest area for improvement remains stress management, particularly on meeting-heavy days.",
-            topInsight: "Running 3+ times per week correlates with a 23% higher focus score and 31% lower stress.",
-            overallScore: 7.1,
+            executiveSummary: "February has been a month of steady growth. Your composite score climbed from 3.6 (Week 1) to 4.1 (Week 4), driven by more consistent exercise and better sleep. The biggest opportunity is staying calm on meeting-heavy days.",
+            topInsight: "Running 3+ times per week lines up with a 23% higher focus score and steadier calm.",
+            overallScore: 4.1,
             isGenerated: true,
             generatedAt: Date()
         )
@@ -305,7 +275,7 @@ enum MockData {
         let correlations: [Correlation] = [
             Correlation(factor1: "Sleep", factor2: "Focus", coefficient: 0.72, description: "Sleep\u{2191} = Focus\u{2191}"),
             Correlation(factor1: "Exercise", factor2: "Energy", coefficient: 0.68, description: "Exercise\u{2191} = Energy\u{2191}"),
-            Correlation(factor1: "Screen Time", factor2: "Stress", coefficient: 0.54, description: "Screen Time\u{2191} = Stress\u{2191}"),
+            Correlation(factor1: "Screen Time", factor2: "Calm", coefficient: -0.54, description: "Screen Time\u{2191} = Calm\u{2193}"),
             Correlation(factor1: "Running", factor2: "Growth", coefficient: 0.61, description: "Running\u{2191} = Growth\u{2191}"),
         ]
         report.setCorrelations(correlations)

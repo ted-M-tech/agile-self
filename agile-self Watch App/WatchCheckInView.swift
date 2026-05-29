@@ -12,7 +12,7 @@ struct WatchCheckInView: View {
     var connectivity: WatchConnectivityManager
 
     @State private var currentStep = 0
-    @State private var scores: [Int] = [5, 5, 5, 5]
+    @State private var scores: [Int] = [3, 3, 3, 3]
     @State private var showConfirmation = false
     @State private var showSuccess = false
 
@@ -66,7 +66,7 @@ struct WatchCheckInView: View {
                 .digitalCrownRotation(
                     detent: $scores[currentStep],
                     from: 1,
-                    through: 10,
+                    through: 5,
                     by: 1,
                     sensitivity: .low,
                     isContinuous: false,
@@ -200,14 +200,15 @@ struct WatchCheckInView: View {
     // MARK: - Helpers
 
     private var compositeScore: Double {
-        computeCompositeScore(energy: scores[0], focus: scores[1], stress: scores[2], growth: scores[3])
+        // scores[2] is the Calm axis (high = calm/good).
+        computeCompositeScore(energy: scores[0], focus: scores[1], calm: scores[2], growth: scores[3])
     }
 
     private func save() {
         connectivity.sendCheckIn(
             energy: scores[0],
             focus: scores[1],
-            stress: scores[2],
+            calm: scores[2],
             growth: scores[3]
         )
         withAnimation { showSuccess = true }

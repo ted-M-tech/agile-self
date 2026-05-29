@@ -16,25 +16,34 @@ final class InsightsViewModel {
 
     var allCheckIns: [DailyCheckIn] = []
     var correlations: [Correlation] = []
+    /// AI-narrated, honest connection sentences derived from `correlations` (numbers stay
+    /// deterministic). Empty until there's enough matched data — the UI then shows honest copy.
+    var connections: [String] = []
     var patterns: [String] = []
     var streak: Streak?
     var monthlyReport: MonthlyReport?
     var isLoading = false
     var errorMessage: String?
 
+    /// All health snapshots, cached from the last `loadData` so `loadConnections` can narrate
+    /// without re-fetching. Computed over all data (the correlations themselves are all-time).
+    private var allHealth: [HealthSnapshot] = []
+
     /// The currently selected time period for filtering.
-    var selectedPeriod: TimePeriod = .month
+    /// Default to `.week` so brand-new accounts see a sensible window instead of
+    /// a sparse-looking 30-day chart on their first week.
+    var selectedPeriod: TimePeriod = .week
 
     // MARK: - Services
 
-    private var aiService: AIService?
+    private var aiService: (any AIServiceProtocol)?
     private var streakService: StreakService?
     private var analyticsService: AnalyticsService?
 
     // MARK: - Init
 
     init(
-        aiService: AIService? = nil,
+        aiService: (any AIServiceProtocol)? = nil,
         streakService: StreakService? = nil,
         analyticsService: AnalyticsService? = nil
     ) {
@@ -46,7 +55,7 @@ final class InsightsViewModel {
     // MARK: - Configure Services
 
     func configure(
-        aiService: AIService,
+        aiService: any AIServiceProtocol,
         streakService: StreakService,
         analyticsService: AnalyticsService
     ) {
@@ -58,16 +67,12 @@ final class InsightsViewModel {
     // MARK: - Filtered Check-Ins
 
     var filteredCheckIns: [DailyCheckIn] {
-        switch selectedPeriod {
-        case .week:
-            return Array(allCheckIns.suffix(7))
-        case .month:
-            return Array(allCheckIns.suffix(30))
-        case .quarter:
-            return Array(allCheckIns.suffix(90))
-        case .year:
+        // Filter by calendar date, not by count: missing days must not pull in
+        // older check-ins (suffix(7) on sparse data would reach weeks back).
+        guard let start = selectedPeriod.startDate() else {
             return allCheckIns
         }
+        return allCheckIns.filter { $0.date >= start }
     }
 
     // MARK: - Load Data
@@ -90,6 +95,7 @@ final class InsightsViewModel {
                     sortBy: [SortDescriptor(\.date, order: .forward)]
                 )
                 let healthSnapshots = try context.fetch(healthDescriptor)
+                allHealth = healthSnapshots
                 let detected = analyticsService.detectCorrelations(
                     checkIns: allCheckIns,
                     health: healthSnapshots
@@ -123,6 +129,18 @@ final class InsightsViewModel {
 
     func loadPatterns() async {
         guard let aiService else { return }
-        patterns = await aiService.generatePatterns(from: allCheckIns)
+        patterns = (try? await aiService.generatePatterns(from: allCheckIns)) ?? []
+    }
+
+    // MARK: - Load Connections
+
+    /// AI-narrated connection sentences. Empty until there's enough matched data (the UI then
+    /// shows honest "keep checking in" copy). Numbers stay deterministic. Call after `loadData`.
+    func loadConnections() async {
+        guard let aiService else { return }
+        connections = (try? await aiService.generateConnections(
+            checkIns: allCheckIns,
+            health: allHealth
+        )) ?? []
     }
 }

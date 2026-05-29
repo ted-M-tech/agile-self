@@ -2,7 +2,8 @@
 //  ScoreDimensionPicker.swift
 //  agile-self
 //
-//  Horizontal 1-10 score picker for a single dimension.
+//  5-level face selector for a single dimension (1 = worst … 5 = best). Replaces the old
+//  1–10 number row to lower the entry barrier: tapping a face is faster than picking a number.
 //
 
 import SwiftUI
@@ -13,14 +14,24 @@ struct ScoreDimensionPicker: View {
     let dimension: DimensionType
     @Binding var score: Int
 
-    private let range = 1...10
+    /// Face glyphs for levels 1…5 (sad → happy). Index 0 = level 1.
+    private static let faces = ["\u{1F623}", "\u{1F641}", "\u{1F610}", "\u{1F642}", "\u{1F604}"]
+    /// Generic quality ladder shown under the row for the selected level.
+    private static let levelWords = ["Very low", "Low", "Okay", "Good", "Great"]
+
+    private let range = 1...5
     private let feedbackGenerator = UIImpactFeedbackGenerator(style: .light)
+
+    private var selectedWord: String {
+        let index = min(max(score, 1), 5) - 1
+        return Self.levelWords[index]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             header
-            scoreRow
-            scaleLabels
+            faceRow
+            selectedLabel
         }
         .padding(Theme.Spacing.md)
         .background(
@@ -53,6 +64,7 @@ struct ScoreDimensionPicker: View {
 
             Spacer()
 
+            // Big selected-value indicator (the 1–5 number).
             Text("\(score)")
                 .font(Theme.Typography.scoreMedium)
                 .foregroundStyle(Theme.Dimension.color(for: dimension))
@@ -60,106 +72,56 @@ struct ScoreDimensionPicker: View {
         }
     }
 
-    // MARK: - Score Row
+    // MARK: - Face Row
 
-    private var scoreRow: some View {
-        GeometryReader { geometry in
-            HStack(spacing: Theme.Spacing.xs) {
-                ForEach(Array(range), id: \.self) { value in
-                    scoreButton(value)
-                }
-            }
-            .gesture(
-                DragGesture(minimumDistance: 8)
-                    .onChanged { gesture in
-                        let totalWidth = geometry.size.width
-                        let x = min(max(gesture.location.x, 0), totalWidth)
-                        let fraction = x / totalWidth
-                        let newValue = Int(round(fraction * 9)) + 1
-                        let clamped = min(max(newValue, 1), 10)
-                        if clamped != score {
-                            updateScore(clamped)
-                        }
-                    }
-            )
-        }
-        .frame(height: 42)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(dimension.label) score")
-        .accessibilityValue("\(score) out of 10")
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment:
-                if score < 10 { updateScore(score + 1) }
-            case .decrement:
-                if score > 1 { updateScore(score - 1) }
-            @unknown default:
-                break
+    private var faceRow: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            ForEach(Array(range), id: \.self) { value in
+                faceButton(value)
             }
         }
+        .frame(maxWidth: .infinity)
     }
 
-    private func scoreButton(_ value: Int) -> some View {
+    private func faceButton(_ value: Int) -> some View {
         let isSelected = value == score
+        let color = Theme.Dimension.color(for: dimension)
 
-        return Text("\(value)")
-            .font(isSelected ? Theme.Typography.headline : Theme.Typography.callout)
-            .foregroundStyle(isSelected ? .white : Theme.Colors.textTertiary)
-            .frame(maxWidth: .infinity)
-            .frame(height: 36)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.CornerRadius.small)
-                    .fill(isSelected
-                          ? Theme.Dimension.color(for: dimension)
-                          : Theme.Colors.backgroundTertiary)
-            )
-            .scaleEffect(isSelected ? 1.15 : 1.0)
-            .animation(Theme.Animation.scoreSelection, value: isSelected)
-            .onTapGesture {
-                updateScore(value)
-            }
+        return Button {
+            updateScore(value)
+        } label: {
+            Text(Self.faces[value - 1])
+                .font(.system(size: 30))
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                        .fill(isSelected ? color.opacity(0.22) : Theme.Colors.backgroundTertiary)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                        .stroke(isSelected ? color : .clear, lineWidth: 2)
+                )
+                .opacity(isSelected ? 1.0 : 0.45)
+                .scaleEffect(isSelected ? 1.15 : 1.0)
+                .animation(Theme.Animation.scoreSelection, value: isSelected)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(dimension.label): \(Self.levelWords[value - 1]), \(value) of 5")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
-    // MARK: - Scale Labels
+    // MARK: - Selected Label
 
-    private var scaleLabels: some View {
+    private var selectedLabel: some View {
         HStack {
-            Text(dimension.isInverted ? "Calm" : "Low")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
-
             Spacer()
-
-            Text(scoreDescriptor)
+            Text(selectedWord)
                 .font(Theme.Typography.caption)
                 .fontWeight(.medium)
                 .foregroundStyle(Theme.Dimension.color(for: dimension))
                 .contentTransition(.numericText())
-
             Spacer()
-
-            Text(dimension.isInverted ? "Very High" : "Great")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary)
-        }
-    }
-
-    private var scoreDescriptor: String {
-        if dimension.isInverted {
-            // Stress: 1-3 = calm, 4-5 = mild, 6-7 = stressed, 8-10 = very stressed
-            switch score {
-            case 1...3: return "Calm"
-            case 4...5: return "Mild"
-            case 6...7: return "Stressed"
-            default: return "Very Stressed"
-            }
-        } else {
-            switch score {
-            case 1...3: return "Low"
-            case 4...5: return "Moderate"
-            case 6...7: return "Good"
-            default: return "Great"
-            }
         }
     }
 
@@ -177,7 +139,7 @@ struct ScoreDimensionPicker: View {
 // MARK: - Preview
 
 #Preview("Energy") {
-    @Previewable @State var score = 7
+    @Previewable @State var score = 4
 
     ZStack {
         Theme.Colors.backgroundPrimary.ignoresSafeArea()
@@ -188,10 +150,10 @@ struct ScoreDimensionPicker: View {
 }
 
 #Preview("All Dimensions") {
-    @Previewable @State var energy = 8
-    @Previewable @State var focus = 6
-    @Previewable @State var stress = 3
-    @Previewable @State var growth = 7
+    @Previewable @State var energy = 4
+    @Previewable @State var focus = 3
+    @Previewable @State var stress = 2
+    @Previewable @State var growth = 5
 
     ZStack {
         Theme.Colors.backgroundPrimary.ignoresSafeArea()

@@ -19,13 +19,18 @@ struct ProfileView: View {
     // MARK: - UI State
 
     @State private var showCompletedActions = false
+    @State private var showAddAction = false
+    @State private var showSettings = false
+    @State private var showPaywall = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
                     if let error = viewModel.errorMessage {
-                        profileErrorView(message: error)
+                        ErrorStateView(message: error) {
+                            viewModel.loadData(context: modelContext)
+                        }
                     } else if viewModel.isLoading {
                         profileLoadingView
                     } else {
@@ -49,6 +54,28 @@ struct ProfileView: View {
                 )
                 viewModel.loadData(context: modelContext)
             }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showAddAction = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(Theme.Colors.accentStart)
+                    }
+                    .accessibilityLabel("Add action")
+                }
+            }
+            .sheet(isPresented: $showAddAction) {
+                AddActionView { text, priority, deadline in
+                    viewModel.addAction(text: text, priority: priority, deadline: deadline, context: modelContext)
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+            }
         }
     }
 
@@ -64,35 +91,6 @@ struct ProfileView: View {
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textTertiary)
             Spacer(minLength: 100)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - Error State
-
-    private func profileErrorView(message: String) -> some View {
-        VStack(spacing: Theme.Spacing.md) {
-            Spacer(minLength: 80)
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 40))
-                .foregroundStyle(Theme.Colors.warning)
-
-            Text("Something went wrong")
-                .font(Theme.Typography.headline)
-                .foregroundStyle(Theme.Colors.textPrimary)
-
-            Text(message)
-                .font(Theme.Typography.callout)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-
-            Button {
-                viewModel.loadData(context: modelContext)
-            } label: {
-                Text("Try Again")
-                    .secondaryButtonStyle()
-            }
-            Spacer(minLength: 80)
         }
         .frame(maxWidth: .infinity)
     }
@@ -130,7 +128,7 @@ struct ProfileView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.lg)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(viewModel.profile?.displayName ?? "User"), \(viewModel.profile?.subscriptionTier.rawValue ?? "free") plan")
+        .accessibilityLabel("\(viewModel.profile?.displayName ?? "User"), \((viewModel.profile?.subscriptionTier ?? .free) == .premium ? "Premium" : "Free") plan")
     }
 
     // MARK: - Streak Section
@@ -139,7 +137,10 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(title: "STREAK")
 
-            HStack(spacing: Theme.Spacing.sm) {
+            // `fixedSize(vertical:)` lets the HStack take the taller column's height; both
+            // sides then expand to it via maxHeight, so the single "Current" card and the
+            // stacked mini-stats column always match (no uneven trailing whitespace).
+            HStack(alignment: .top, spacing: Theme.Spacing.sm) {
                 // Current streak (emphasized)
                 VStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: "flame.fill")
@@ -154,7 +155,7 @@ struct ProfileView: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.vertical, Theme.Spacing.lg)
                 .background(Theme.Colors.backgroundSecondary)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
@@ -173,6 +174,7 @@ struct ProfileView: View {
                         icon: "trophy.fill",
                         color: Theme.Dimension.energy
                     )
+                    .frame(maxHeight: .infinity)
 
                     streakMiniStat(
                         value: "\(viewModel.streak?.totalCheckIns ?? 0)",
@@ -180,8 +182,11 @@ struct ProfileView: View {
                         icon: "checkmark.circle.fill",
                         color: Theme.Colors.success
                     )
+                    .frame(maxHeight: .infinity)
                 }
+                .frame(maxWidth: .infinity)
             }
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -227,11 +232,19 @@ struct ProfileView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(viewModel.activeActions, id: \.id) { action in
-                        ActionRow(action: action) {
-                            withAnimation(Theme.Animation.smooth) {
-                                viewModel.toggleAction(action)
+                        ActionRow(
+                            action: action,
+                            onToggle: {
+                                withAnimation(Theme.Animation.smooth) {
+                                    viewModel.toggleAction(action, context: modelContext)
+                                }
+                            },
+                            onDelete: {
+                                withAnimation(Theme.Animation.smooth) {
+                                    viewModel.deleteAction(action, context: modelContext)
+                                }
                             }
-                        }
+                        )
 
                         if action.id != viewModel.activeActions.last?.id {
                             Divider()
@@ -293,11 +306,19 @@ struct ProfileView: View {
             if showCompletedActions && !viewModel.completedActions.isEmpty {
                 VStack(spacing: 0) {
                     ForEach(viewModel.completedActions, id: \.id) { action in
-                        ActionRow(action: action) {
-                            withAnimation(Theme.Animation.smooth) {
-                                viewModel.toggleAction(action)
+                        ActionRow(
+                            action: action,
+                            onToggle: {
+                                withAnimation(Theme.Animation.smooth) {
+                                    viewModel.toggleAction(action, context: modelContext)
+                                }
+                            },
+                            onDelete: {
+                                withAnimation(Theme.Animation.smooth) {
+                                    viewModel.deleteAction(action, context: modelContext)
+                                }
                             }
-                        }
+                        )
 
                         if action.id != viewModel.completedActions.last?.id {
                             Divider()
@@ -320,26 +341,20 @@ struct ProfileView: View {
             sectionHeader(title: "PREFERENCES")
 
             VStack(spacing: 0) {
-                settingsRow(icon: "heart.fill", label: "Health Data", iconColor: .red)
+                // One entry point to the full Settings screen (health, notifications,
+                // export, about, privacy all live there). Subscription opens the paywall.
+                settingsRow(icon: "gearshape.fill", label: "Settings", iconColor: Theme.Colors.textSecondary) { showSettings = true }
                 settingsDivider
-                settingsRow(icon: "iphone", label: "Screen Time", iconColor: .cyan)
-                settingsDivider
-                settingsRow(icon: "bell.fill", label: "Notifications", iconColor: Theme.Colors.warning)
-                settingsDivider
-                settingsRow(icon: "crown.fill", label: "Subscription", iconColor: Theme.Dimension.energy)
-                settingsDivider
-                settingsRow(icon: "square.and.arrow.up", label: "Export Data", iconColor: Theme.Colors.success)
-                settingsDivider
-                settingsRow(icon: "info.circle", label: "About", iconColor: Theme.Colors.textSecondary)
+                settingsRow(icon: "crown.fill", label: "Subscription", iconColor: Theme.Dimension.energy) { showPaywall = true }
             }
             .background(Theme.Colors.backgroundSecondary)
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
         }
     }
 
-    private func settingsRow(icon: String, label: String, iconColor: Color) -> some View {
+    private func settingsRow(icon: String, label: String, iconColor: Color, action: @escaping () -> Void) -> some View {
         Button {
-            // Navigation placeholder
+            action()
         } label: {
             HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: icon)
@@ -380,6 +395,7 @@ struct ProfileView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .tracking(1.2)
+                .accessibilityAddTraits(.isHeader)
 
             if let count {
                 Text("\(count)")

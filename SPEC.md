@@ -320,19 +320,19 @@ small: 8  medium: 12  large: 16  xl: 20  pill: 999
 
 | Component | Technology | Version |
 |-----------|------------|---------|
-| Language | Swift | 6.0+ |
-| UI | SwiftUI | iOS 18.1+ |
-| Data | SwiftData | iOS 18+ |
-| Cloud Sync | CloudKit (via SwiftData) | - |
-| Health | HealthKit | - |
-| Screen Time | DeviceActivity / FamilyControls | - |
+| Language | Swift | 5.0 (Approachable Concurrency) |
+| UI | SwiftUI | iOS 26.1+ |
+| Data | SwiftData | iOS 26+ |
+| Cloud Sync | CloudKit (via SwiftData) | Deferred to M6 (`cloudKitDatabase = .none`) |
+| Health | HealthKit | Free-account ✅ |
+| Screen Time | DeviceActivity / FamilyControls | Deferred (paid/uncertain) |
 | Charts | Swift Charts | - |
-| AI (on-device) | NaturalLanguage + Foundation Models | iOS 18.1+ |
-| AI (cloud) | Gemini 2.0 Flash API | - |
-| Subscription | StoreKit 2 | - |
-| Widget | WidgetKit | - |
-| Notifications | UserNotifications | - |
-| Min iOS | **18.1** | - |
+| AI (on-device) | Foundation Models + NaturalLanguage | iOS 26.1+ |
+| AI (cloud) | Gemini API | Deferred (behind `allowCloudAI`) |
+| Subscription | StoreKit 2 | local `.storekit` config |
+| Widget | WidgetKit | App Group `group.tetsuya.agile-self` |
+| Notifications | UserNotifications | local-only |
+| Min iOS | **26.1** | - |
 
 ### 5.2 Architecture Pattern
 
@@ -345,7 +345,7 @@ Views → ViewModels → Services → SwiftData Models
 
 **Dependency Injection via AppContainer:**
 ```swift
-@MainActor @Observable
+@Observable  // nonisolated by default — no SWIFT_DEFAULT_ACTOR_ISOLATION
 final class AppContainer {
     let modelContainer: ModelContainer
     lazy var healthKitService = HealthKitService()
@@ -680,7 +680,7 @@ AgileWidget/                        (Widget Extension)
 | FamilyControls entitlement がAppleに却下される | Screen Time 機能なし | HealthKit の screenTime カテゴリで代替検討 |
 | Gemini API 無料枠の制限変更 | AI機能のコスト増 | Claude/OpenAI への切り替え容易な AIServiceProtocol 設計 |
 | Foundation Models の成熟度 | 低品質なインサイト | ルールベースフォールバック実装済み |
-| iOS 18.1+ の普及率 | ユーザーベース縮小 | ターゲット層は最新OS率が高い |
+| iOS 26.1+ の普及率 | ユーザーベース縮小 | ターゲット層は最新OS率が高い |
 | Apple Journal との競合 | 差別化の弱さ | 構造化×AI分析で明確な差別化 |
 | Subscription fatigue | 低い課金率 | 無料でも十分使える + AI体験で課金動機 |
 

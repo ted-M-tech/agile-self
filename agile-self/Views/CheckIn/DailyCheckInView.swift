@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import os
 
 // MARK: - DailyCheckInView
 
@@ -18,11 +19,11 @@ struct DailyCheckInView: View {
     @Query(sort: \DailyCheckIn.date, order: .reverse)
     private var recentCheckIns: [DailyCheckIn]
 
-    // Scores
-    @State private var energyScore = 5
-    @State private var focusScore = 5
-    @State private var stressScore = 5
-    @State private var growthScore = 5
+    // Scores (1–5; neutral default = 3)
+    @State private var energyScore = 3
+    @State private var focusScore = 3
+    @State private var stressScore = 3
+    @State private var growthScore = 3
 
     // Note
     @State private var noteText = ""
@@ -39,7 +40,40 @@ struct DailyCheckInView: View {
     @State private var isSaving = false
     @State private var generatedInsight: String?
 
+    // Editor lifecycle
+    /// Guards the one-time preload of today's saved check-in (so reopening the editor
+    /// shows the SAVED scores, not 5/5/5/5, and never clobbers a prior same-day entry).
+    @State private var didLoadExisting = false
+    /// Snapshot of the scores/note as they were loaded, used to detect unsaved edits
+    /// for the discard guard.
+    @State private var loadedSnapshot = EditorSnapshot()
+    /// Whether the discard-confirmation dialog is showing.
+    @State private var showDiscardDialog = false
+
     private let noteMaxLength = 280
+
+    /// Captures the editable fields so we can tell whether the user changed anything.
+    private struct EditorSnapshot: Equatable {
+        var energy = 3
+        var focus = 3
+        var stress = 3
+        var growth = 3
+        var note = ""
+    }
+
+    private var currentSnapshot: EditorSnapshot {
+        EditorSnapshot(
+            energy: energyScore,
+            focus: focusScore,
+            stress: stressScore,
+            growth: growthScore,
+            note: showNote ? noteText : ""
+        )
+    }
+
+    private var hasUnsavedChanges: Bool {
+        currentSnapshot != loadedSnapshot
+    }
 
     /// Composite score of the most recent previous check-in, for delta display.
     private var previousComposite: Double? {
@@ -69,7 +103,9 @@ struct DailyCheckInView: View {
                     growthScore: growthScore,
                     elapsedSeconds: elapsedSeconds,
                     previousComposite: previousComposite,
-                    insight: generatedInsight,
+                    // Bind to the @State so the overlay re-renders the moment the
+                    // async insight task completes (it starts nil and updates in place).
+                    insight: $generatedInsight,
                     onDismiss: {
                         showConfirmation = false
                         dismiss()
@@ -78,11 +114,62 @@ struct DailyCheckInView: View {
                 .transition(.opacity)
             }
         }
-        .onAppear {
+        .task {
+            loadExistingCheckIn()
             startTimer()
         }
         .onDisappear {
             timerTask?.cancel()
+        }
+        .confirmationDialog(
+            "Discard this check-in?",
+            isPresented: $showDiscardDialog,
+            titleVisibility: .visible
+        ) {
+            Button("Discard", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("Your changes haven't been saved yet.")
+        }
+    }
+
+    // MARK: - Load Existing
+
+    /// On first appearance, preloads today's saved check-in (if any) so the editor shows
+    /// the SAVED values instead of resetting to 5/5/5/5 — and so a Save updates the row
+    /// rather than silently overwriting it with defaults. Fetched by the same
+    /// start-of-day predicate `saveCheckIn` upserts on. Runs once per presentation.
+    private func loadExistingCheckIn() {
+        guard !didLoadExisting else { return }
+        didLoadExisting = true
+
+        let today = Calendar.current.startOfDay(for: Date())
+        let descriptor = FetchDescriptor<DailyCheckIn>(predicate: #Predicate { $0.date == today })
+        guard let existing = try? modelContext.fetch(descriptor).first else {
+            // No prior entry today — record the default state as the baseline so an
+            // untouched editor closes without a discard prompt.
+            loadedSnapshot = currentSnapshot
+            return
+        }
+
+        energyScore = existing.energyScore
+        focusScore = existing.focusScore
+        stressScore = existing.stressScore
+        growthScore = existing.growthScore
+        if let note = existing.note, !note.isEmpty {
+            noteText = note
+            showNote = true
+        }
+        loadedSnapshot = currentSnapshot
+    }
+
+    /// Handles the close (X) button: prompts before discarding unsaved edits, but closes
+    /// immediately when nothing changed (the common case).
+    private func handleClose() {
+        if hasUnsavedChanges {
+            showDiscardDialog = true
+        } else {
+            dismiss()
         }
     }
 
@@ -108,7 +195,7 @@ struct DailyCheckInView: View {
 
             // Dismiss button
             Button {
-                dismiss()
+                handleClose()
             } label: {
                 Image(systemName: "xmark")
                     .font(.body.weight(.medium))
@@ -277,26 +364,70 @@ struct DailyCheckInView: View {
         isSaving = true
         timerTask?.cancel()
 
-        let checkIn = DailyCheckIn(
-            energyScore: energyScore,
-            focusScore: focusScore,
-            stressScore: stressScore,
-            growthScore: growthScore,
-            note: showNote && !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? noteText.trimmingCharacters(in: .whitespacesAndNewlines)
-                : nil
-        )
+        let today = Calendar.current.startOfDay(for: Date())
+        let note = showNote && !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+            : nil
 
-        modelContext.insert(checkIn)
+        // Upsert: update today's check-in if it exists, otherwise insert. Mirrors
+        // WatchConnectivityService.persistCheckIn so the phone and watch never create
+        // duplicate rows for the same day (fixes the duplicate check-in bug).
+        let descriptor = FetchDescriptor<DailyCheckIn>(predicate: #Predicate { $0.date == today })
+        let existing = try? modelContext.fetch(descriptor).first
+        let checkIn: DailyCheckIn
+        if let existing {
+            existing.energyScore = energyScore
+            existing.focusScore = focusScore
+            existing.stressScore = stressScore
+            existing.growthScore = growthScore
+            existing.note = note
+            checkIn = existing
+        } else {
+            let newCheckIn = DailyCheckIn(
+                date: today,
+                energyScore: energyScore,
+                focusScore: focusScore,
+                stressScore: stressScore,
+                growthScore: growthScore,
+                note: note
+            )
+            modelContext.insert(newCheckIn)
+            checkIn = newCheckIn
+        }
+        AppLog.checkIn.notice("\(existing == nil ? "create" : "upsert", privacy: .public) composite=\(checkIn.compositeScore, privacy: .public) e=\(self.energyScore, privacy: .public) f=\(self.focusScore, privacy: .public) s=\(self.stressScore, privacy: .public) g=\(self.growthScore, privacy: .public) note=\(note != nil, privacy: .public)")
+
+        // Persist on-device sentiment of the note (-1.0...1.0) so Insights can
+        // correlate it later. Routed through the DI container's shared on-device
+        // service (a fast, nonisolated NaturalLanguage call) rather than a throwaway
+        // instance. Set to nil when there's no note so an edited check-in clears a
+        // stale score.
+        if let note {
+            checkIn.sentimentScore = appContainer.analyzeSentiment(note)
+        } else {
+            checkIn.sentimentScore = nil
+        }
 
         // Record check-in for streak tracking
         appContainer.streakService.recordCheckIn(context: modelContext)
 
-        // Generate AI insight asynchronously
+        // Publish the latest state to the home-screen widget via the App Group.
+        WidgetSnapshotWriter.update(context: modelContext)
+
+        // Now that the row is persisted, the editor has no unsaved edits — closing the
+        // confirmation must not trigger the discard prompt.
+        loadedSnapshot = currentSnapshot
+
+        // Generate the AI insight asynchronously via the injected service. The
+        // confirmation overlay binds to `generatedInsight`, so it shows a graceful
+        // placeholder first and re-renders the moment this completes.
+        generatedInsight = nil
         Task {
-            if let insight = await appContainer.aiService.generateDailyInsight(checkIn: checkIn) {
+            do {
+                let insight = try await appContainer.aiService.generateDailyInsight(checkIn: checkIn)
                 checkIn.dailyInsight = insight
                 generatedInsight = insight
+            } catch {
+                // AI insight generation failed -- continue without it
             }
         }
 

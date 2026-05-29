@@ -124,33 +124,36 @@ final class AnalyticsService {
             ))
         }
 
-        // Screen Time vs Stress
-        let screenStressPairs = matchedPairs.compactMap { pair -> (Double, Double)? in
+        // Screen Time vs Calm (stressScore stores Calm, high = calm/good). The Pearson
+        // sign is computed from the real stored values, so the arrows stay correct after
+        // the reframe (more screen time typically lowers calm → negative coefficient).
+        let calmLabel = DimensionType.stress.label
+        let screenCalmPairs = matchedPairs.compactMap { pair -> (Double, Double)? in
             guard let screen = pair.health.screenTimeMinutes else { return nil }
-            return (Double(screen), Double(pair.checkIn.stressScore))
+            return (Double(screen), Double(pair.checkIn.calmScore))
         }
-        if let coeff = pearsonCorrelation(screenStressPairs), abs(coeff) >= 0.3 {
-            let direction = coeff > 0 ? "\u{2191}" : "\u{2193}"
+        if let coeff = pearsonCorrelation(screenCalmPairs), abs(coeff) >= 0.3 {
+            let calmDirection = coeff > 0 ? "\u{2191}" : "\u{2193}"
             correlations.append(Correlation(
                 factor1: "Screen Time",
-                factor2: "Stress",
+                factor2: calmLabel,
                 coefficient: coeff,
-                description: "Screen Time\(direction) = Stress\(direction)"
+                description: "Screen Time\u{2191} = \(calmLabel)\(calmDirection)"
             ))
         }
 
-        // Resting Heart Rate vs Stress
-        let hrStressPairs = matchedPairs.compactMap { pair -> (Double, Double)? in
+        // Resting Heart Rate vs Calm
+        let hrCalmPairs = matchedPairs.compactMap { pair -> (Double, Double)? in
             guard let hr = pair.health.restingHeartRate else { return nil }
-            return (Double(hr), Double(pair.checkIn.stressScore))
+            return (Double(hr), Double(pair.checkIn.calmScore))
         }
-        if let coeff = pearsonCorrelation(hrStressPairs), abs(coeff) >= 0.3 {
-            let direction = coeff > 0 ? "\u{2191}" : "\u{2193}"
+        if let coeff = pearsonCorrelation(hrCalmPairs), abs(coeff) >= 0.3 {
+            let calmDirection = coeff > 0 ? "\u{2191}" : "\u{2193}"
             correlations.append(Correlation(
                 factor1: "Heart Rate",
-                factor2: "Stress",
+                factor2: calmLabel,
                 coefficient: coeff,
-                description: "Heart Rate\(direction) = Stress\(direction)"
+                description: "Heart Rate\u{2191} = \(calmLabel)\(calmDirection)"
             ))
         }
 

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 import Charts
 
 // MARK: - MonthlyReportView
@@ -13,11 +14,14 @@ import Charts
 struct MonthlyReportView: View {
     let onDismiss: () -> Void
 
-    private let report = MockData.monthlyReport
-    private let checkIns = MockData.monthlyCheckIns
+    @Environment(AppContainer.self) private var appContainer
+    @Environment(\.modelContext) private var modelContext
 
+    @State private var viewModel = MonthlyReportViewModel()
     @State private var animateRing = false
-    @State private var animateChart = false
+
+    private var report: MonthlyReport? { viewModel.report }
+    private var checkIns: [DailyCheckIn] { viewModel.monthCheckIns }
 
     var body: some View {
         ZStack {
@@ -27,31 +31,147 @@ struct MonthlyReportView: View {
             VStack(spacing: 0) {
                 topBar
 
-                ScrollView {
-                    VStack(spacing: Theme.Spacing.lg) {
-                        overallScoreGauge
-                        trendChartSection
-                        heatmapSection
-                        correlationsSection
-                        executiveSummarySection
-                        shareButton
-                        Spacer(minLength: Theme.Spacing.xxl)
+                if viewModel.isLoading || viewModel.isGenerating {
+                    loadingState
+                } else if viewModel.isReportReady {
+                    // A renderable report takes precedence over a transient load error so a
+                    // re-load failure never blows away an already-generated report.
+                    reportContent
+                } else if let error = viewModel.errorMessage {
+                    ErrorStateView(message: error) {
+                        Task { await viewModel.loadData(context: modelContext) }
                     }
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.top, Theme.Spacing.sm)
+                } else if viewModel.needsMoreCheckIns {
+                    needsMoreDataState
+                } else {
+                    // ≥ threshold check-ins, but the report isn't generated yet (e.g. the model
+                    // returned empty content this pass). Not an error, not "log more" — just pending.
+                    reportPendingState
                 }
-                .scrollIndicators(.hidden)
             }
         }
         .preferredColorScheme(.dark)
+        .task {
+            viewModel.configure(aiService: appContainer.aiService)
+            await viewModel.loadData(context: modelContext)
+        }
         .onAppear {
-            withAnimation(Theme.Animation.ringFill) {
+            withMotionAnimation(Theme.Animation.ringFill) {
                 animateRing = true
             }
-            withAnimation(Theme.Animation.trendLineDraw) {
-                animateChart = true
-            }
         }
+    }
+
+    // MARK: - Loading / Empty States
+
+    private var loadingState: some View {
+        VStack(spacing: Theme.Spacing.lg) {
+            Spacer()
+            ProgressView()
+                .tint(Theme.Colors.accentStart)
+                .scaleEffect(1.2)
+            Text(viewModel.isGenerating ? "Generating your report..." : "Loading...")
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textTertiary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Shown while still below the check-in threshold (count < required). Distinguishes
+    /// "no check-ins yet" from "a few logged, almost there" with explicit progress — instead
+    /// of a meaningless 0.0 gauge with empty sections. (The count ≥ required case is handled
+    /// separately by `reportPendingState`, so `remaining` here is always ≥ 1.)
+    private var needsMoreDataState: some View {
+        let count = viewModel.checkInCount
+        let required = viewModel.minimumCheckInsToGenerate
+        let remaining = max(0, required - count)
+
+        return VStack(spacing: Theme.Spacing.md) {
+            Spacer()
+            Image(systemName: "calendar.badge.clock")
+                .font(.system(size: 44))
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            Text(count == 0 ? "No check-ins yet this month" : "Building your report")
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.textPrimary)
+
+            Text(insufficientDataMessage(count: count, required: required, remaining: remaining))
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, Theme.Spacing.xl)
+
+            if count > 0 {
+                ProgressView(value: Double(min(count, required)), total: Double(required))
+                    .tint(Theme.Colors.accentStart)
+                    .frame(maxWidth: 180)
+                    .padding(.top, Theme.Spacing.xs)
+
+                Text("\(count) of \(required) check-ins")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(insufficientDataMessage(count: count, required: required, remaining: remaining))
+    }
+
+    private func insufficientDataMessage(count: Int, required: Int, remaining: Int) -> String {
+        if count == 0 {
+            return "Check in daily — your monthly report appears here once you've logged \(required) days."
+        }
+        return "Log \(remaining) more check-in\(remaining == 1 ? "" : "s") this month to unlock your AI-generated report with trends and patterns."
+    }
+
+    /// Reached when there are enough check-ins (≥ threshold) but the report still isn't
+    /// generated — e.g. the model returned empty content this pass. It will regenerate as more
+    /// data accrues, so this is a calm "pending" state, not an error and not "log more".
+    private var reportPendingState: some View {
+        VStack(spacing: Theme.Spacing.md) {
+            Spacer()
+            Image(systemName: "hourglass")
+                .font(.system(size: 40))
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            Text("Your report is on its way")
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.textPrimary)
+
+            Text("We couldn't put your report together just yet. Check back after your next check-in.")
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, Theme.Spacing.xl)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Your report is on its way. We couldn't put your report together just yet. Check back after your next check-in.")
+    }
+
+    // MARK: - Full Report
+
+    private var reportContent: some View {
+        ScrollView {
+            VStack(spacing: Theme.Spacing.lg) {
+                overallScoreGauge
+                trendChartSection
+                heatmapSection
+                correlationsSection
+                executiveSummarySection
+                shareButton
+                Spacer(minLength: Theme.Spacing.xxl)
+            }
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.top, Theme.Spacing.sm)
+        }
+        .scrollIndicators(.hidden)
     }
 
     // MARK: - Top Bar
@@ -88,9 +208,10 @@ struct MonthlyReportView: View {
     private var monthYearTitle: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM yyyy"
+        let now = Calendar.current.dateComponents([.month, .year], from: Date())
         var components = DateComponents()
-        components.month = report.month
-        components.year = report.year
+        components.month = report?.month ?? now.month
+        components.year = report?.year ?? now.year
         guard let date = Calendar.current.date(from: components) else { return "" }
         return formatter.string(from: date)
     }
@@ -121,7 +242,7 @@ struct MonthlyReportView: View {
 
                 // Score display
                 VStack(spacing: Theme.Spacing.xs) {
-                    Text(String(format: "%.1f", report.overallScore ?? 0))
+                    Text(String(format: "%.1f", report?.overallScore ?? 0))
                         .font(Theme.Typography.scoreDisplay)
                         .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -132,7 +253,7 @@ struct MonthlyReportView: View {
             }
             .frame(width: 160, height: 160)
 
-            if let topInsight = report.topInsight {
+            if let topInsight = report?.topInsight {
                 HStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: "lightbulb.fill")
                         .font(.caption)
@@ -149,21 +270,53 @@ struct MonthlyReportView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.md)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Overall monthly score: \(String(format: "%.1f", report.overallScore ?? 0)) out of 10")
+        .accessibilityLabel("Overall monthly score: \(String(format: "%.1f", report?.overallScore ?? 0)) out of 5")
     }
 
     private var ringProgress: Double {
-        (report.overallScore ?? 0) / 10.0
+        (report?.overallScore ?? 0) / 5.0
     }
 
     // MARK: - 2. Trend Chart (4-axis, 30 days)
+
+    private var chartDates: [Date] { checkIns.map(\.date) }
+
+    /// Pin to a full 30-day window so the month chart never crowds/garbles and
+    /// reads consistently regardless of how many days were logged. The window
+    /// ends at the latest check-in (or today) and spans 30 days back.
+    private var chartDomain: ClosedRange<Date> {
+        let calendar = Calendar.current
+        let end = chartDates.max().map(calendar.startOfDay(for:)) ?? calendar.startOfDay(for: Date())
+        let start = calendar.date(byAdding: .day, value: -29, to: end) ?? end
+        // If real data starts later than the 30-day floor, still honor the
+        // earliest point so a single day pads sensibly.
+        let earliest = chartDates.min().map(calendar.startOfDay(for:)) ?? start
+        let lower = min(start, earliest)
+        guard lower < end else {
+            let lo = calendar.date(byAdding: .hour, value: -12, to: end) ?? end
+            let hi = calendar.date(byAdding: .hour, value: 12, to: end) ?? end
+            return lo ... hi
+        }
+        return lower ... end
+    }
+
+    /// Spoken summary of the 30-day trend chart for VoiceOver.
+    private var monthlyChartAccessibilitySummary: String {
+        guard !checkIns.isEmpty else { return "No data yet." }
+        let composites = checkIns.map(\.compositeScore)
+        let avg = composites.reduce(0, +) / Double(composites.count)
+        return String(
+            format: "%d check-ins this month, averaging %.1f out of 5.",
+            checkIns.count, avg
+        )
+    }
 
     private var trendChartSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(title: "30-DAY TRENDS", icon: "chart.xyaxis.line")
 
-            if animateChart {
-                Chart {
+            // Drawn unconditionally (no entrance-animation gate) so it never renders blank.
+            Chart {
                     ForEach(checkIns, id: \.id) { checkIn in
                         ForEach(DimensionType.allCases) { dimension in
                             LineMark(
@@ -174,11 +327,20 @@ struct MonthlyReportView: View {
                             .foregroundStyle(Theme.Dimension.color(for: dimension))
                             .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round))
                             .interpolationMethod(.catmullRom)
+
+                            // Visible point so a single day (or gaps) still show.
+                            PointMark(
+                                x: .value("Day", checkIn.date, unit: .day),
+                                y: .value(dimension.label, Double(checkIn.score(for: dimension)))
+                            )
+                            .foregroundStyle(Theme.Dimension.color(for: dimension))
+                            .symbolSize(checkIns.count <= 1 ? 36 : 10)
                         }
                     }
                 }
+                .chartXScale(domain: chartDomain)
                 .chartXAxis {
-                    AxisMarks(values: .automatic) { value in
+                    AxisMarks(values: .stride(by: .day, count: ChartAxis.dayStride(for: chartDates, desiredCount: 6))) { value in
                         AxisValueLabel {
                             if let date = value.as(Date.self) {
                                 Text(date.formatted(.dateTime.day()))
@@ -189,7 +351,7 @@ struct MonthlyReportView: View {
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .leading, values: [2, 4, 6, 8, 10]) { value in
+                    AxisMarks(position: .leading, values: [1, 2, 3, 4, 5]) { value in
                         AxisValueLabel {
                             if let intValue = value.as(Int.self) {
                                 Text("\(intValue)")
@@ -201,9 +363,11 @@ struct MonthlyReportView: View {
                             .foregroundStyle(Theme.Colors.divider)
                     }
                 }
-                .chartYScale(domain: 1...10)
+                .chartYScale(domain: 1...5)
                 .frame(height: 200)
-            }
+                .accessibilityElement()
+                .accessibilityLabel("30-day dimension trends")
+                .accessibilityValue(monthlyChartAccessibilitySummary)
 
             // Dimension legend
             dimensionLegend
@@ -237,12 +401,17 @@ struct MonthlyReportView: View {
 
     // MARK: - 4. Correlations
 
+    @ViewBuilder
     private var correlationsSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            sectionHeader(title: "CORRELATIONS", icon: "arrow.triangle.branch")
+        // Hide entirely when there are no correlations yet (e.g. no matched Health data),
+        // rather than showing a lone header over empty space.
+        if let correlations = report?.correlations, !correlations.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                sectionHeader(title: "CORRELATIONS", icon: "arrow.triangle.branch")
 
-            ForEach(report.correlations) { correlation in
-                correlationRow(correlation)
+                ForEach(correlations) { correlation in
+                    correlationRow(correlation)
+                }
             }
         }
     }
@@ -280,35 +449,42 @@ struct MonthlyReportView: View {
 
     // MARK: - 5. Executive Summary
 
+    @ViewBuilder
     private var executiveSummarySection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            sectionHeader(title: "EXECUTIVE SUMMARY", icon: "doc.text.fill")
+        // Only render the card when there is summary text — never a header-only empty card.
+        if let summary = report?.executiveSummary, !summary.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                sectionHeader(title: "EXECUTIVE SUMMARY", icon: "doc.text.fill")
 
-            if let summary = report.executiveSummary {
                 Text(summary)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .lineSpacing(6)
             }
+            .cardStyle()
         }
-        .cardStyle()
     }
 
     // MARK: - Share Button
 
+    @ViewBuilder
     private var shareButton: some View {
-        Button {
-            // Share action placeholder
-        } label: {
-            HStack(spacing: Theme.Spacing.sm) {
-                Image(systemName: "square.and.arrow.up")
-                Text("Share Report")
+        // Only offer sharing once the report is actually generated (avoids sharing an
+        // empty/half-built report).
+        if let report, report.isGenerated {
+            ShareLink(
+                item: ShareContentBuilder.monthlyReportText(report, checkIns: checkIns),
+                subject: Text("My Monthly Report")
+            ) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Image(systemName: "square.and.arrow.up")
+                    Text("Share Report")
+                }
+                .secondaryButtonStyle()
             }
-            .secondaryButtonStyle()
+            .accessibilityHint("Share the monthly report via the share sheet")
         }
-        .buttonStyle(.plain)
-        .accessibilityHint("Share the monthly report via the share sheet")
     }
 
     // MARK: - Helpers
@@ -324,6 +500,7 @@ struct MonthlyReportView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .tracking(1.2)
+                .accessibilityAddTraits(.isHeader)
 
             Spacer()
         }
@@ -334,4 +511,6 @@ struct MonthlyReportView: View {
 
 #Preview {
     MonthlyReportView(onDismiss: {})
+        .modelContainer(MockData.previewContainer)
+        .environment(AppContainer(modelContainer: MockData.previewContainer))
 }
