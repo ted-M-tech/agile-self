@@ -21,10 +21,13 @@ struct SettingsView: View {
     // MARK: - Local State
 
     @State private var displayName: String = ""
+    /// The single daily check-in reminder control, backed by `profile.notificationsEnabled`
+    /// (the daily reminder is the app's only notification now that weekly review is cut).
     @State private var reminderEnabled: Bool = true
+    /// Set while we mutate `reminderEnabled` programmatically (revert / OS reconciliation) so the
+    /// bound Toggle's `.onChange` doesn't re-enter the scheduling side-effects.
+    @State private var isSyncingReminder = false
     @State private var reminderTime: Date = SettingsView.defaultReminderTime
-    @State private var allowCloudAI: Bool = false
-    @State private var notificationsEnabled: Bool = true
     @State private var showPaywall: Bool = false
     @State private var showPrivacySheet: Bool = false
     @State private var selectedLanguage: String = {
@@ -32,7 +35,9 @@ struct SettingsView: View {
         return current.hasPrefix("ja") ? "ja" : "en"
     }()
     @State private var showLanguageRestartAlert = false
+    @State private var showNotificationsDeniedAlert = false
     @State private var exportFile: ExportedDataFile?
+    @State private var showExportShare = false
     @State private var showDeleteConfirmation = false
 
     // MARK: - Constants
@@ -81,7 +86,7 @@ struct SettingsView: View {
             }
             .task {
                 loadProfile()
-                exportFile = appContainer.dataManagementService.exportFile(context: modelContext)
+                await reconcileReminderWithSystem()
             }
             .confirmationDialog(
                 "Delete All Data?",
@@ -89,16 +94,15 @@ struct SettingsView: View {
                 titleVisibility: .visible
             ) {
                 Button("Delete Everything", role: .destructive) {
+                    // Content-only wipe: clears logged data + resets the streak, but PRESERVES
+                    // the profile (name, reminder time, preferences) and keeps you signed in.
+                    // The scheduled daily reminder intentionally stays (you're still set up).
                     appContainer.dataManagementService.deleteAllData(context: modelContext)
-                    appContainer.refreshCloudAIPreference(context: modelContext)
-                    // RootView gates onboarding on this @AppStorage key (see D4). Reset
-                    // it so a full wipe returns the user to onboarding.
-                    UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
                     dismiss()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This permanently deletes all your check-ins, reviews, reports, and actions on this device. This cannot be undone.")
+                Text("This permanently deletes your check-ins, health data, reports, actions, and streak on this device. Your name and settings are kept. This cannot be undone.")
             }
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
@@ -106,10 +110,18 @@ struct SettingsView: View {
             .sheet(isPresented: $showPrivacySheet) {
                 privacyInfoSheet
             }
+            .sheet(isPresented: $showExportShare) {
+                exportShareSheet
+            }
             .alert("Restart to Apply Language", isPresented: $showLanguageRestartAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("The new language takes effect the next time you open Agile Self.")
+            }
+            .alert("Notifications Are Off", isPresented: $showNotificationsDeniedAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Turn on notifications for Agile Self in iOS Settings to get your daily check-in reminder.")
             }
         }
         .preferredColorScheme(.dark)
@@ -214,8 +226,13 @@ struct SettingsView: View {
                     Toggle("", isOn: $reminderEnabled)
                         .labelsHidden()
                         .tint(Theme.Colors.accentStart)
-                        .onChange(of: reminderEnabled) { _, _ in
-                            saveReminderSettings()
+                        .onChange(of: reminderEnabled) { _, newValue in
+                            // Ignore programmatic reverts/reconciliation; only act on real taps.
+                            if isSyncingReminder {
+                                isSyncingReminder = false
+                                return
+                            }
+                            setReminder(enabled: newValue)
                         }
                 }
                 .padding(.horizontal, Theme.Spacing.md)
@@ -249,7 +266,7 @@ struct SettingsView: View {
                         .tint(Theme.Colors.accentStart)
                         .colorScheme(.dark)
                         .onChange(of: reminderTime) { _, _ in
-                            saveReminderSettings()
+                            rescheduleReminderTime()
                         }
                     }
                     .padding(.horizontal, Theme.Spacing.md)
@@ -270,29 +287,26 @@ struct SettingsView: View {
             sectionHeader(title: "AI & PRIVACY")
 
             VStack(spacing: 0) {
-                // Cloud AI toggle
+                // On-device AI status (honest: insights run locally; cloud AI is not used yet,
+                // so we don't show an editable toggle for a deferred feature).
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     HStack(spacing: Theme.Spacing.md) {
-                        Image(systemName: "cloud.fill")
+                        Image(systemName: "cpu")
                             .font(.callout)
                             .foregroundStyle(Theme.Colors.accentEnd)
                             .frame(width: 24, height: 24)
 
-                        Text("Cloud AI")
+                        Text("On-Device AI")
                             .font(Theme.Typography.body)
                             .foregroundStyle(Theme.Colors.textPrimary)
 
                         Spacer()
 
-                        Toggle("", isOn: $allowCloudAI)
-                            .labelsHidden()
-                            .tint(Theme.Colors.accentStart)
-                            .onChange(of: allowCloudAI) { _, newValue in
-                                saveCloudAI(newValue)
-                            }
+                        Text("Active")
+                            .pillStyle(color: Theme.Colors.success)
                     }
 
-                    Text("Allow AI analysis via cloud. Your data is anonymized before sending.")
+                    Text("Your insights are generated privately on this device. Nothing is sent to the cloud.")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                         .padding(.leading, 24 + Theme.Spacing.md)
@@ -300,9 +314,7 @@ struct SettingsView: View {
                 .padding(.horizontal, Theme.Spacing.md)
                 .padding(.vertical, Theme.Spacing.md)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Cloud AI analysis")
-                .accessibilityValue(allowCloudAI ? "On" : "Off")
-                .accessibilityHint("Your data is anonymized before sending")
+                .accessibilityLabel("On-device AI is active. Your insights are generated privately on this device.")
 
                 settingsDivider
 
@@ -370,34 +382,6 @@ struct SettingsView: View {
                     statusText: "Not available",
                     statusColor: Theme.Colors.textTertiary
                 )
-
-                settingsDivider
-
-                // Notifications row
-                HStack(spacing: Theme.Spacing.md) {
-                    Image(systemName: "bell.badge.fill")
-                        .font(.callout)
-                        .foregroundStyle(Theme.Colors.warning)
-                        .frame(width: 24, height: 24)
-
-                    Text("Notifications")
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-
-                    Spacer()
-
-                    Toggle("", isOn: $notificationsEnabled)
-                        .labelsHidden()
-                        .tint(Theme.Colors.accentStart)
-                        .onChange(of: notificationsEnabled) { _, newValue in
-                            saveNotifications(newValue)
-                        }
-                }
-                .padding(.horizontal, Theme.Spacing.md)
-                .padding(.vertical, Theme.Spacing.md)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Notifications")
-                .accessibilityValue(notificationsEnabled ? "Enabled" : "Disabled")
             }
             .background(Theme.Colors.backgroundSecondary)
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
@@ -485,17 +469,17 @@ struct SettingsView: View {
             sectionHeader(title: "DATA")
 
             VStack(spacing: 0) {
-                if let exportFile {
-                    ShareLink(item: exportFile, preview: SharePreview("Agile Self Data Export")) {
-                        dataRowLabel(icon: "square.and.arrow.up", title: "Export Data", trailing: "JSON", iconColor: Theme.Colors.success)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Export data")
-                    .accessibilityHint("Share your data as a JSON file")
-                } else {
+                // Build the JSON lazily on tap (not on every Settings open) — serializing the
+                // whole store eagerly each appearance was wasteful.
+                Button {
+                    exportFile = appContainer.dataManagementService.exportFile(context: modelContext)
+                    showExportShare = true
+                } label: {
                     dataRowLabel(icon: "square.and.arrow.up", title: "Export Data", trailing: "JSON", iconColor: Theme.Colors.success)
-                        .opacity(0.5)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Export data")
+                .accessibilityHint("Prepares your data as a JSON file to share")
 
                 Divider()
                     .overlay(Theme.Colors.divider)
@@ -616,17 +600,17 @@ struct SettingsView: View {
                             .font(Theme.Typography.headline)
                             .foregroundStyle(Theme.Colors.textPrimary)
 
-                        Text("All your check-in data, health metrics, and action items are stored locally on your device using SwiftData. Your data never leaves your device unless you explicitly enable Cloud AI.")
+                        Text("All your check-in data, health metrics, and action items are stored locally on your device using SwiftData. Your data stays on your device.")
                             .font(Theme.Typography.callout)
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Label("Cloud AI Processing", systemImage: "cloud.fill")
+                        Label("On-Device AI", systemImage: "cpu")
                             .font(Theme.Typography.headline)
                             .foregroundStyle(Theme.Colors.textPrimary)
 
-                        Text("When Cloud AI is enabled, your data is anonymized and stripped of personally identifiable information before being sent for analysis. We use Gemini 2.0 Flash for AI insights. You can disable this at any time.")
+                        Text("Your insights, patterns, and connections are generated on this device using Apple's on-device intelligence. Your reflections and health data are never sent to a server for AI analysis.")
                             .font(Theme.Typography.callout)
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }
@@ -661,6 +645,55 @@ struct SettingsView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { showPrivacySheet = false }
                         .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.accentStart)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    // MARK: - Export Share Sheet
+
+    @ViewBuilder
+    private var exportShareSheet: some View {
+        NavigationStack {
+            VStack(spacing: Theme.Spacing.lg) {
+                Spacer()
+                Image(systemName: "square.and.arrow.up.circle.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(Theme.Colors.success)
+
+                Text("Your data is ready")
+                    .font(Theme.Typography.title2)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+
+                Text("A JSON file with all your check-ins, health data, reports, and actions.")
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Theme.Spacing.xl)
+
+                if let exportFile {
+                    ShareLink(item: exportFile, preview: SharePreview("Agile Self Data Export")) {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("Share JSON")
+                        }
+                        .primaryButtonStyle()
+                    }
+                    .padding(.horizontal, Theme.Spacing.lg)
+                } else {
+                    Text("Couldn't prepare the export. Please try again.")
+                        .font(Theme.Typography.callout)
+                        .foregroundStyle(Theme.Colors.warning)
+                }
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
+            .background(Theme.Colors.backgroundPrimary.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { showExportShare = false }
                         .foregroundStyle(Theme.Colors.accentStart)
                 }
             }
@@ -759,8 +792,7 @@ struct SettingsView: View {
     private func loadProfile() {
         guard let profile else { return }
         displayName = profile.displayName ?? ""
-        allowCloudAI = profile.allowCloudAI
-        notificationsEnabled = profile.notificationsEnabled
+        reminderEnabled = profile.notificationsEnabled
 
         var components = DateComponents()
         components.hour = profile.checkInReminderHour
@@ -775,21 +807,66 @@ struct SettingsView: View {
         profile.displayName = name.isEmpty ? nil : name
     }
 
-    private func saveReminderSettings() {
+    /// Persists the chosen reminder time onto the profile (without touching scheduling).
+    private func persistReminderTime() {
         guard let profile else { return }
         let components = Calendar.current.dateComponents([.hour, .minute], from: reminderTime)
         profile.checkInReminderHour = components.hour ?? 21
         profile.checkInReminderMinute = components.minute ?? 0
     }
 
-    private func saveCloudAI(_ enabled: Bool) {
+    /// Turning the daily reminder on/off ACTUALLY schedules or cancels the notification (and
+    /// requests authorization when enabling). If permission is denied, the toggle reverts so
+    /// it reflects reality.
+    private func setReminder(enabled: Bool) {
         guard let profile else { return }
-        profile.allowCloudAI = enabled
+        persistReminderTime()
+
+        if enabled {
+            Task {
+                let granted = await appContainer.notificationService.requestAuthorization()
+                if granted {
+                    profile.notificationsEnabled = true
+                    appContainer.notificationService.scheduleDailyReminder(
+                        hour: profile.checkInReminderHour,
+                        minute: profile.checkInReminderMinute
+                    )
+                } else {
+                    profile.notificationsEnabled = false
+                    isSyncingReminder = true
+                    reminderEnabled = false
+                    appContainer.notificationService.cancelAll()
+                    showNotificationsDeniedAlert = true
+                }
+            }
+        } else {
+            profile.notificationsEnabled = false
+            appContainer.notificationService.cancelAll()
+        }
     }
 
-    private func saveNotifications(_ enabled: Bool) {
+    /// Brings the in-app reminder state in line with the OS: if the user revoked notifications
+    /// in iOS Settings while the app thought the reminder was on, turn it off (and clear any
+    /// stale pending request) so the toggle never falsely claims an active reminder.
+    private func reconcileReminderWithSystem() async {
+        guard let profile, profile.notificationsEnabled else { return }
+        let authorized = await appContainer.notificationService.isAuthorized()
+        guard !authorized else { return }
+        profile.notificationsEnabled = false
+        isSyncingReminder = true
+        reminderEnabled = false
+        appContainer.notificationService.cancelAll()
+    }
+
+    /// Reschedules the reminder at the new time when it is enabled; otherwise just persists it.
+    private func rescheduleReminderTime() {
         guard let profile else { return }
-        profile.notificationsEnabled = enabled
+        persistReminderTime()
+        guard reminderEnabled else { return }
+        appContainer.notificationService.scheduleDailyReminder(
+            hour: profile.checkInReminderHour,
+            minute: profile.checkInReminderMinute
+        )
     }
 }
 

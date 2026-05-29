@@ -42,18 +42,18 @@ final class DataManagementService {
 
     // MARK: - Delete All
 
-    /// Deletes every record and re-seeds the singleton UserProfile + Streak so the app
-    /// remains in a valid state after a wipe.
+    /// Deletes the user's logged CONTENT and resets the streak, but PRESERVES the UserProfile
+    /// (display name, reminder time, preferences) so "Delete All Data" clears your data without
+    /// signing you out or forcing re-onboarding. The profile's scheduled reminder stays valid.
     func deleteAllData(context: ModelContext) {
         deleteAll(DailyCheckIn.self, context: context)
         deleteAll(HealthSnapshot.self, context: context)
         deleteAll(WeeklyReview.self, context: context)
         deleteAll(MonthlyReport.self, context: context)
         deleteAll(ActionItemV2.self, context: context)
-        deleteAll(UserProfile.self, context: context)
         deleteAll(Streak.self, context: context)
 
-        context.insert(UserProfile())
+        // Reset the streak counters to zero (a fresh Streak) but keep the profile intact.
         context.insert(Streak())
         try? context.save()
     }

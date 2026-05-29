@@ -27,6 +27,14 @@ final class NotificationService {
 
     // MARK: - Authorization
 
+    /// The real OS authorization state. Used to reconcile the persisted "reminder on" flag
+    /// when notifications may have been revoked in iOS Settings out-of-band (iOS silently
+    /// drops the pending request, so the in-app toggle must not keep claiming it's on).
+    func isAuthorized() async -> Bool {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        return settings.authorizationStatus == .authorized
+    }
+
     /// Requests notification authorization from the user.
     /// Returns true if authorization was granted.
     func requestAuthorization() async -> Bool {

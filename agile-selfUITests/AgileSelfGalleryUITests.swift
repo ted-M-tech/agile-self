@@ -102,8 +102,10 @@ final class AgileSelfGalleryUITests: XCTestCase {
                 if cancel.exists { cancel.tap() }
             }
 
-            // Settings (collapsed single row)
+            // Settings (collapsed single row). Wait for the sheet content to actually render
+            // before snapping (tapping the row alone doesn't guarantee the sheet is up yet).
             if tapIfPossible(firstButton(containing: "Settings")) {
+                _ = app.staticTexts["Daily Reminder"].waitForExistence(timeout: 8)
                 snap("settings")
                 dismissSheet()
             }
