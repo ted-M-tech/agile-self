@@ -20,51 +20,46 @@ struct TodayConnectionCard: View {
 
     var body: some View {
         if let connection {
+            // Self-contained card matching AIInsightCard exactly (same padding / background /
+            // radius / accent border) so the two AI cards on Home read as a unified pair. The
+            // in-card "Mood meets Health" title (wand icon) is the parallel to "AI Insight"
+            // (lightbulb); the former external "TODAY'S CONNECTION" section header is dropped.
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                Text("TODAY'S CONNECTION")
-                    .font(Theme.Typography.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .tracking(1.2)
-                    .padding(.leading, Theme.Spacing.xs)
+                HStack(spacing: Theme.Spacing.sm) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.callout)
+                        .foregroundStyle(Theme.Colors.accentStart)
 
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    HStack(spacing: Theme.Spacing.sm) {
-                        Image(systemName: "wand.and.stars")
-                            .font(.callout)
-                            .foregroundStyle(Theme.Colors.accentStart)
-
-                        Text("Mood meets Health")
-                            .font(Theme.Typography.headline)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                    }
-
-                    Text(connection)
-                        .font(Theme.Typography.body)
+                    Text("Mood meets Health")
+                        .font(Theme.Typography.headline)
                         .foregroundStyle(Theme.Colors.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .lineSpacing(4)
-
-                    if let stat = supportingStat {
-                        HStack(spacing: Theme.Spacing.xs) {
-                            Image(systemName: stat.icon)
-                                .font(.caption)
-                                .foregroundStyle(stat.color)
-                            Text(stat.text)
-                                .font(Theme.Typography.footnote)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                        }
-                        .padding(.top, Theme.Spacing.xs)
-                    }
                 }
-                .padding(Theme.Spacing.md)
-                .background(Theme.Colors.backgroundTertiary)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
-                        .stroke(Theme.Colors.accentStart.opacity(0.3), lineWidth: 1)
-                )
+
+                Text(connection)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineSpacing(4)
+
+                if let stat = supportingStat {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Image(systemName: stat.icon)
+                            .font(.caption)
+                            .foregroundStyle(stat.color)
+                        Text(stat.text)
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    .padding(.top, Theme.Spacing.xs)
+                }
             }
+            .padding(Theme.Spacing.md)
+            .background(Theme.Colors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                    .stroke(Theme.Colors.accentStart.opacity(0.3), lineWidth: 1)
+            )
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Today's connection: \(connection)")
         }

@@ -47,10 +47,12 @@ struct TimePeriodFilteringTests {
 
     @Test
     func windowDaysMapping() {
+        // TimePeriod was refactored to W / M / 6M / Y (Quarter removed; year is now a fixed
+        // 365-day window rather than "no lower bound"). Assertions updated to match.
         #expect(TimePeriod.week.windowDays == 7)
         #expect(TimePeriod.month.windowDays == 30)
-        #expect(TimePeriod.quarter.windowDays == 90)
-        #expect(TimePeriod.year.windowDays == nil)
+        #expect(TimePeriod.sixMonths.windowDays == 180)
+        #expect(TimePeriod.year.windowDays == 365)
     }
 
     @Test
@@ -63,10 +65,14 @@ struct TimePeriodFilteringTests {
     }
 
     @Test
-    func yearHasNoLowerBound() {
+    func yearWindowIs365DaysInclusive() {
+        // Post-refactor, `.year` is a fixed 365-day window (inclusive of today), so its
+        // start date is 364 days before the reference rather than nil.
         let cal = utcGregorian()
         let ref = cal.date(from: DateComponents(year: 2026, month: 5, day: 28))!
-        #expect(TimePeriod.year.startDate(relativeTo: ref, calendar: cal) == nil)
+        let start = TimePeriod.year.startDate(relativeTo: ref, calendar: cal)
+        let expected = cal.startOfDay(for: cal.date(byAdding: .day, value: -364, to: ref)!)
+        #expect(start == expected)
     }
 
     @MainActor

@@ -41,7 +41,9 @@ enum TimePeriod: String, CaseIterable {
 
     /// The inclusive lower-bound date (stripped to midnight) for this period,
     /// computed relative to `reference`. Check-ins whose `date` is `>= start`
-    /// belong to the window. Returns `nil` for `.year` (no lower bound).
+    /// belong to the window. Every current period is a fixed window (`.year` = 364 days
+    /// before today), so this returns non-nil for all cases; the optional return is kept only
+    /// as a guard against a future period that opts out of a lower bound.
     func startDate(
         relativeTo reference: Date = Date(),
         calendar: Calendar = .current
@@ -533,37 +535,62 @@ struct InsightsView: View {
 
     private var reviewActionsSection: some View {
         VStack(spacing: Theme.Spacing.md) {
+            // Browse / edit / back-fill any day.
+            NavigationLink {
+                HistoryCalendarView()
+            } label: {
+                actionRow(
+                    icon: "calendar",
+                    iconColor: Theme.Colors.accentStart,
+                    title: "History",
+                    subtitle: "Browse, edit, or back-fill any day"
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open check-in history")
+
             if let onShowMonthlyReport {
                 Button(action: onShowMonthlyReport) {
-                    HStack(spacing: Theme.Spacing.md) {
-                        Image(systemName: "doc.text.fill")
-                            .font(.title3)
-                            .foregroundStyle(Theme.Dimension.growth)
-
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                            Text("Monthly Report")
-                                .font(Theme.Typography.headline)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-
-                            Text("View your AI-generated growth report")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                    }
-                    .padding(Theme.Spacing.md)
-                    .background(Theme.Colors.backgroundSecondary)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
+                    actionRow(
+                        icon: "doc.text.fill",
+                        iconColor: Theme.Dimension.growth,
+                        title: "Monthly Report",
+                        subtitle: "View your AI-generated growth report"
+                    )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("View Monthly Report")
             }
         }
+    }
+
+    /// Shared row for the navigation cards in `reviewActionsSection` (History, Monthly Report).
+    private func actionRow(icon: String, iconColor: Color, title: String, subtitle: String) -> some View {
+        HStack(spacing: Theme.Spacing.md) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(iconColor)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text(title)
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+
+                Text(subtitle)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(Theme.Colors.textTertiary)
+        }
+        .padding(Theme.Spacing.md)
+        .background(Theme.Colors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
     }
 
     // MARK: - Helpers

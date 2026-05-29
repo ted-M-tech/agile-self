@@ -91,4 +91,78 @@ final class Streak {
             longestStreak = currentStreak
         }
     }
+
+    /// Rebuilds every streak statistic from the full set of check-in dates.
+    ///
+    /// This is the authoritative path for any write that changes *which days exist* —
+    /// back-filling a missed day, deleting an entry, or an edit that adds/removes a day.
+    /// The incremental `recordCheckIn(on:)` only understands today-relative transitions, so it
+    /// cannot bridge a newly-filled gap or re-derive the streak after a deletion; this scan can.
+    ///
+    /// - `totalCheckIns` = number of distinct days with a check-in.
+    /// - `longestStreak` = longest run of consecutive days anywhere in history.
+    /// - `currentStreak` = the run ending on the most recent day, but only when that day is
+    ///   today or yesterday (otherwise the current run is broken → 0). This matches the prior
+    ///   "ending today (or yesterday if today is pending)" semantics. Because it recomputes
+    ///   honestly, `longestStreak` can legitimately *decrease* if check-ins are deleted.
+    ///
+    /// - Parameters:
+    ///   - checkInDates: every check-in's `date` (need not be unique or sorted).
+    ///   - now: the reference "today" (injectable for testing).
+    func recomputeFromHistory(checkInDates: [Date], asOf now: Date = Date()) {
+        let calendar = Calendar.current
+        let days = Set(checkInDates.map { calendar.startOfDay(for: $0) }).sorted()
+
+        totalCheckIns = days.count
+
+        guard let mostRecent = days.last else {
+            currentStreak = 0
+            longestStreak = 0
+            lastCheckInDate = nil
+            return
+        }
+        lastCheckInDate = mostRecent
+
+        // Longest consecutive run anywhere in the history.
+        var longest = 1
+        var run = 1
+        for index in 1..<days.count {
+            let prevDay = days[index - 1]
+            let curDay = days[index]
+            if let next = calendar.date(byAdding: .day, value: 1, to: prevDay),
+               calendar.isDate(curDay, inSameDayAs: next) {
+                run += 1
+            } else {
+                run = 1
+            }
+            longest = max(longest, run)
+        }
+        longestStreak = longest
+
+        // The current run is only "live" if the most recent check-in is today or yesterday.
+        let today = calendar.startOfDay(for: now)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)
+        let isLive = calendar.isDate(mostRecent, inSameDayAs: today)
+            || (yesterday.map { calendar.isDate(mostRecent, inSameDayAs: $0) } ?? false)
+        guard isLive else {
+            currentStreak = 0
+            return
+        }
+
+        // Count consecutive days backward from the most recent.
+        var current = 1
+        var index = days.count - 1
+        while index > 0 {
+            let prevDay = days[index - 1]
+            let curDay = days[index]
+            if let next = calendar.date(byAdding: .day, value: 1, to: prevDay),
+               calendar.isDate(curDay, inSameDayAs: next) {
+                current += 1
+                index -= 1
+            } else {
+                break
+            }
+        }
+        currentStreak = current
+    }
 }
