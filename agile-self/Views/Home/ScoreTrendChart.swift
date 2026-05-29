@@ -29,6 +29,8 @@ struct ScoreTrendChart: View {
             header
             if checkIns.isEmpty {
                 emptyState
+            } else if checkIns.count == 1 {
+                singlePointChart
             } else {
                 chart
             }
@@ -60,10 +62,11 @@ struct ScoreTrendChart: View {
                         .foregroundStyle(Theme.Colors.textPrimary)
 
                     if let delta = scoreDelta {
-                        Text(deltaString(delta))
+                        let trend = TrendDelta.classify(delta)
+                        Text(deltaString(delta, trend: trend))
                             .font(Theme.Typography.footnote)
                             .fontWeight(.semibold)
-                            .foregroundStyle(delta >= 0 ? Theme.Colors.success : Theme.Colors.error)
+                            .foregroundStyle(trend.color)
                     }
                 }
             }
@@ -92,6 +95,8 @@ struct ScoreTrendChart: View {
 
     // MARK: - Chart
 
+    private var dates: [Date] { checkIns.map(\.date) }
+
     private var chart: some View {
         Chart(checkIns, id: \.id) { checkIn in
             if animateChart {
@@ -119,18 +124,23 @@ struct ScoreTrendChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
                 .interpolationMethod(.catmullRom)
 
-                if checkIn.id == checkIns.last?.id {
-                    PointMark(
-                        x: .value("Day", checkIn.date, unit: .day),
-                        y: .value("Score", checkIn.compositeScore)
-                    )
-                    .foregroundStyle(Theme.Colors.accentEnd)
-                    .symbolSize(40)
-                }
+                // Always-visible point at every check-in so a sparse line still
+                // shows where the data is; the final point is emphasized.
+                PointMark(
+                    x: .value("Day", checkIn.date, unit: .day),
+                    y: .value("Score", checkIn.compositeScore)
+                )
+                .foregroundStyle(
+                    checkIn.id == checkIns.last?.id
+                        ? Theme.Colors.accentEnd
+                        : Theme.Colors.accentStart
+                )
+                .symbolSize(checkIn.id == checkIns.last?.id ? 40 : 18)
             }
         }
+        .chartXScale(domain: ChartAxis.dateDomain(for: dates))
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day)) { value in
+            AxisMarks(values: .stride(by: .day, count: ChartAxis.dayStride(for: dates, desiredCount: 7))) { value in
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
                         Text(date.formatted(.dateTime.weekday(.narrow)))
@@ -141,15 +151,51 @@ struct ScoreTrendChart: View {
             }
         }
         .chartYAxis(.hidden)
-        .chartYScale(domain: 1...10)
+        .chartYScale(domain: 1...5)
         .frame(height: 120)
+    }
+
+    /// Exactly one check-in: a lone line is invisible, so show the point plus a
+    /// hint instead of an empty-looking axis.
+    private var singlePointChart: some View {
+        VStack(spacing: Theme.Spacing.xs) {
+            Chart(checkIns, id: \.id) { checkIn in
+                PointMark(
+                    x: .value("Day", checkIn.date, unit: .day),
+                    y: .value("Score", checkIn.compositeScore)
+                )
+                .foregroundStyle(Theme.Colors.accentEnd)
+                .symbolSize(60)
+            }
+            .chartXScale(domain: ChartAxis.dateDomain(for: dates))
+            .chartXAxis {
+                AxisMarks(values: dates) { value in
+                    AxisValueLabel {
+                        if let date = value.as(Date.self) {
+                            Text(date.formatted(.dateTime.weekday(.narrow)))
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                        }
+                    }
+                }
+            }
+            .chartYAxis(.hidden)
+            .chartYScale(domain: 1...5)
+            .frame(height: 96)
+
+            Text("Keep checking in to see your trend")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
     }
 
     // MARK: - Helpers
 
-    private func deltaString(_ delta: Double) -> String {
-        let arrow = delta >= 0 ? "\u{25B2}" : "\u{25BC}"
-        return "\(arrow)\(String(format: "%.1f", abs(delta)))"
+    private func deltaString(_ delta: Double, trend: TrendDelta) -> String {
+        if trend == .neutral {
+            return "\(trend.glyph) 0.0"
+        }
+        return "\(trend.glyph)\(String(format: "%.1f", abs(delta)))"
     }
 }
 

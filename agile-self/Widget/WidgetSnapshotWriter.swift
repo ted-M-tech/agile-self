@@ -9,6 +9,7 @@
 
 import Foundation
 import SwiftData
+import os
 #if canImport(WidgetKit)
 import WidgetKit
 #endif
@@ -37,9 +38,15 @@ enum WidgetSnapshotWriter {
             updatedAt: Date()
         )
 
+        AppLog.widget.notice("publish hasCheckIn=\(snapshot.hasCheckInToday, privacy: .public) composite=\(snapshot.compositeScore, privacy: .public) e=\(snapshot.energyScore ?? -1, privacy: .public) f=\(snapshot.focusScore ?? -1, privacy: .public) s=\(snapshot.stressScore ?? -1, privacy: .public) g=\(snapshot.growthScore ?? -1, privacy: .public) streak=\(snapshot.currentStreak, privacy: .public)")
+
         guard let defaults = UserDefaults(suiteName: WidgetSnapshot.appGroupID),
-              let data = try? JSONEncoder().encode(snapshot) else { return }
+              let data = try? JSONEncoder().encode(snapshot) else {
+            AppLog.widget.error("publish FAILED — could not open App Group suite=\(WidgetSnapshot.appGroupID, privacy: .public) or encode")
+            return
+        }
         defaults.set(data, forKey: WidgetSnapshot.defaultsKey)
+        AppLog.widget.notice("publish WROTE \(data.count, privacy: .public) bytes to App Group key=\(WidgetSnapshot.defaultsKey, privacy: .public)")
 
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()

@@ -35,18 +35,30 @@ enum AppTab: String, CaseIterable {
 // MARK: - MainTabView
 
 struct MainTabView: View {
+    /// One-shot deep-link from onboarding ("Start First Check-in"). Consumed once on first
+    /// appear to auto-open the check-in, then cleared so it never re-opens.
+    @Binding var openCheckInOnAppear: Bool
+
     @State private var selectedTab: AppTab = .home
     @State private var showSettings = false
     @State private var showCheckIn = false
     @State private var showWeeklyReview = false
     @State private var showMonthlyReport = false
+    /// Bumped when the check-in cover dismisses so Home reloads (a full-screen cover does not
+    /// remove Home underneath, so its `.task` never re-runs on its own).
+    @State private var homeRefreshToken = 0
+
+    init(openCheckInOnAppear: Binding<Bool> = .constant(false)) {
+        _openCheckInOnAppear = openCheckInOnAppear
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
             Tab(AppTab.home.title, systemImage: AppTab.home.icon, value: .home) {
                 HomeView(
                     onShowSettings: { showSettings = true },
-                    onLogCheckIn: { showCheckIn = true }
+                    onLogCheckIn: { showCheckIn = true },
+                    refreshToken: homeRefreshToken
                 )
             }
 
@@ -65,10 +77,19 @@ struct MainTabView: View {
         .toolbarBackground(Theme.Colors.backgroundSecondary, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarColorScheme(.dark, for: .tabBar)
+        .onAppear {
+            // Consume the onboarding deep-link exactly once: open the check-in, then clear
+            // the flag so it never re-fires on subsequent appears.
+            if openCheckInOnAppear {
+                openCheckInOnAppear = false
+                selectedTab = .home
+                showCheckIn = true
+            }
+        }
         .sheet(isPresented: $showSettings) {
             SettingsView()
         }
-        .fullScreenCover(isPresented: $showCheckIn) {
+        .fullScreenCover(isPresented: $showCheckIn, onDismiss: { homeRefreshToken += 1 }) {
             DailyCheckInView()
         }
         .sheet(isPresented: $showWeeklyReview) {

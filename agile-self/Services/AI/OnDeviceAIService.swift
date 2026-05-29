@@ -37,39 +37,45 @@ final class OnDeviceAIService: AIServiceProtocol, @unchecked Sendable {
 
         let composite = checkIn.compositeScore
 
-        // Overall score commentary
-        if composite >= 8.0 {
-            insights.append("Outstanding day! You're firing on all cylinders.")
-        } else if composite >= 7.0 {
-            insights.append("Solid day overall. Your scores are looking healthy.")
-        } else if composite >= 5.5 {
-            insights.append("A balanced day. Room to grow, but you're on track.")
+        // Overall score commentary (six bands, descending; composite is a plain 1-5 mean).
+        // A neutral 3.0 lands in the gentle "nothing to fix here" middle band.
+        if composite >= 4.5 {
+            insights.append("What a day. Energy, focus, and growth all showed up — savor this one.")
+        } else if composite >= 3.7 {
+            insights.append("Strong day. You're moving in a good direction — keep the rhythm.")
+        } else if composite >= 3.0 {
+            insights.append("A balanced, ordinary day — and ordinary days are most of a good life. Nothing to fix here.")
+        } else if composite >= 2.3 {
+            insights.append("A solid, steady day. You showed up, and that's what builds the trend.")
+        } else if composite >= 1.5 {
+            insights.append("A lighter day. Be kind to yourself tonight; tomorrow gets a fresh page.")
         } else {
-            insights.append("Tough day. Remember, one off day doesn't define your trend.")
+            insights.append("Today asked a lot of you. Logging it anyway is the win — one day never defines your trend.")
         }
 
-        // Dimension-specific insights
-        if checkIn.energyScore >= 8 {
+        // Dimension-specific insights (1–5 scale)
+        if checkIn.energyScore >= 5 {
             insights.append("Great energy today! This often correlates with better focus tomorrow.")
-        } else if checkIn.energyScore <= 3 {
+        } else if checkIn.energyScore <= 2 {
             insights.append("Energy was low today. Consider prioritizing sleep tonight.")
         }
 
-        if checkIn.focusScore >= 8 {
+        if checkIn.focusScore >= 5 {
             insights.append("Exceptional focus. What conditions made this possible?")
-        } else if checkIn.focusScore <= 3 {
+        } else if checkIn.focusScore <= 2 {
             insights.append("Focus was challenging today. A change of environment might help.")
         }
 
-        if checkIn.stressScore >= 7 {
-            insights.append("Stress is elevated. A short walk or breathing exercise could help reset.")
-        } else if checkIn.stressScore <= 2 {
-            insights.append("Very low stress. Great mental state for tackling important tasks.")
+        // stressScore now stores Calm (high = calm/good).
+        if checkIn.stressScore <= 2 {
+            insights.append("Calm was hard to find today — a short walk or breathing reset could help.")
+        } else if checkIn.stressScore >= 5 {
+            insights.append("High calm — a great state for deep, focused work.")
         }
 
-        if checkIn.growthScore >= 8 {
+        if checkIn.growthScore >= 5 {
             insights.append("Strong growth mindset today. Keep challenging yourself.")
-        } else if checkIn.growthScore <= 3 {
+        } else if checkIn.growthScore <= 2 {
             insights.append("Growth felt stagnant. Try learning something small tomorrow.")
         }
 
@@ -105,28 +111,29 @@ final class OnDeviceAIService: AIServiceProtocol, @unchecked Sendable {
 
         let avgComposite = checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
         let avgEnergy = Double(checkIns.map(\.energyScore).reduce(0, +)) / Double(checkIns.count)
-        let avgStress = Double(checkIns.map(\.stressScore).reduce(0, +)) / Double(checkIns.count)
+        // stressScore stores Calm (high = calm/good).
+        let avgCalm = Double(checkIns.map(\.stressScore).reduce(0, +)) / Double(checkIns.count)
         let avgFocus = Double(checkIns.map(\.focusScore).reduce(0, +)) / Double(checkIns.count)
 
         // Overall trend question
-        if avgComposite >= 7.0 {
+        if avgComposite >= 3.5 {
             questions.append("Your overall score averaged \(String(format: "%.1f", avgComposite)) this week. What drove this strong performance?")
         } else {
             questions.append("Your overall score averaged \(String(format: "%.1f", avgComposite)) this week. What factors held you back?")
         }
 
-        // Stress question
-        if avgStress >= 6.0 {
-            questions.append("Stress was elevated this week (avg \(String(format: "%.1f", avgStress))/10). What were the main stressors?")
+        // Calm question — low calm means the week ran tense.
+        if avgCalm <= 2.5 {
+            questions.append("Calm was low this week (avg \(String(format: "%.1f", avgCalm))/5). What were the main stressors?")
         }
 
         // Energy question
-        if avgEnergy <= 5.0 {
+        if avgEnergy <= 2.5 {
             questions.append("Energy was on the lower side this week. How's your sleep and recovery routine?")
         }
 
         // Focus question
-        if avgFocus >= 7.0 {
+        if avgFocus >= 3.5 {
             questions.append("Focus was strong this week. What environment or habits helped you stay focused?")
         }
 
@@ -152,7 +159,7 @@ final class OnDeviceAIService: AIServiceProtocol, @unchecked Sendable {
         checkIns: [DailyCheckIn]
     ) async throws -> WeeklySummaryResult {
         // Heuristic-based summary generation
-        let avgComposite = checkIns.isEmpty ? 5.0 :
+        let avgComposite = checkIns.isEmpty ? 3.0 :
             checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
 
         let bestDay = checkIns.max(by: { $0.compositeScore < $1.compositeScore })
@@ -161,7 +168,7 @@ final class OnDeviceAIService: AIServiceProtocol, @unchecked Sendable {
         var wins: [String] = []
         var challenges: [String] = []
 
-        if avgComposite >= 7.0 {
+        if avgComposite >= 3.5 {
             wins.append("Maintained strong overall scores (avg \(String(format: "%.1f", avgComposite)))")
         }
         if checkIns.count >= 5 {
@@ -171,12 +178,13 @@ final class OnDeviceAIService: AIServiceProtocol, @unchecked Sendable {
             wins.append("Peak performance day with composite score \(String(format: "%.1f", best.compositeScore))")
         }
 
-        let avgStress = checkIns.isEmpty ? 5.0 :
+        // stressScore stores Calm (high = calm/good); low avg calm is the concern.
+        let avgCalm = checkIns.isEmpty ? 3.0 :
             Double(checkIns.map(\.stressScore).reduce(0, +)) / Double(checkIns.count)
-        if avgStress >= 6.0 {
-            challenges.append("Elevated stress levels (avg \(String(format: "%.1f", avgStress))/10)")
+        if avgCalm <= 2.5 {
+            challenges.append("Low calm levels (avg \(String(format: "%.1f", avgCalm))/5)")
         }
-        if let worst = worstDay, worst.compositeScore < 5.5 {
+        if let worst = worstDay, worst.compositeScore < 2.5 {
             challenges.append("Low point with composite score \(String(format: "%.1f", worst.compositeScore))")
         }
         if checkIns.count < 5 {
@@ -184,12 +192,12 @@ final class OnDeviceAIService: AIServiceProtocol, @unchecked Sendable {
         }
 
         let summary = "Your week averaged a composite score of \(String(format: "%.1f", avgComposite)). " +
-            (avgComposite >= 7.0
+            (avgComposite >= 3.5
                 ? "This reflects strong consistency across all dimensions."
-                : "There is room for improvement, particularly in managing stress and maintaining energy.")
+                : "There is room for improvement, particularly in staying calm and maintaining energy.")
 
-        let takeaway = avgStress >= 6.0
-            ? "Consider building in more recovery time and stress-reduction activities next week."
+        let takeaway = avgCalm <= 2.5
+            ? "Consider building in more recovery time and calming activities next week."
             : "Keep building on your positive momentum. Try to identify what makes your best days great."
 
         let suggestedActions = [
@@ -210,7 +218,7 @@ final class OnDeviceAIService: AIServiceProtocol, @unchecked Sendable {
         checkIns: [DailyCheckIn],
         health: [HealthSnapshot]
     ) async throws -> MonthlyReportResult {
-        let avgComposite = checkIns.isEmpty ? 5.0 :
+        let avgComposite = checkIns.isEmpty ? 3.0 :
             checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
 
         // Simple trend: compare first half vs second half
@@ -258,15 +266,16 @@ final class OnDeviceAIService: AIServiceProtocol, @unchecked Sendable {
 
         let avgEnergy = Double(checkIns.map(\.energyScore).reduce(0, +)) / Double(checkIns.count)
         let avgFocus = Double(checkIns.map(\.focusScore).reduce(0, +)) / Double(checkIns.count)
-        let avgStress = Double(checkIns.map(\.stressScore).reduce(0, +)) / Double(checkIns.count)
+        // stressScore stores Calm (high = calm/good).
+        let avgCalm = Double(checkIns.map(\.stressScore).reduce(0, +)) / Double(checkIns.count)
 
-        if avgFocus >= 7.0 {
+        if avgFocus >= 3.5 {
             patterns.append("Focus has been consistently strong this period.")
         }
-        if avgStress >= 6.0 {
-            patterns.append("Stress tends to run high \u{2014} watch for recovery time.")
+        if avgCalm <= 2.5 {
+            patterns.append("Calm tends to run low \u{2014} watch for recovery time.")
         }
-        if avgEnergy <= 5.0 {
+        if avgEnergy <= 2.5 {
             patterns.append("Energy is on the lower side \u{2014} sleep may be the lever.")
         }
 
@@ -275,5 +284,30 @@ final class OnDeviceAIService: AIServiceProtocol, @unchecked Sendable {
         }
 
         return Array(patterns.prefix(3))
+    }
+
+    // MARK: - Connections (qualitative mood ↔ quantitative health)
+
+    /// Always-available heuristic. Numbers come from `ConnectionNarrator` (deterministic,
+    /// AnalyticsService-backed); returns [] until there are enough matched pairs.
+    nonisolated func generateConnections(
+        checkIns: [DailyCheckIn],
+        health: [HealthSnapshot]
+    ) async throws -> [String] {
+        ConnectionNarrator.connections(checkIns: checkIns, health: health)
+    }
+
+    /// Always-available heuristic for today's single connection sentence. Returns nil when
+    /// there is no health data (UI hides the card).
+    nonisolated func generateTodayConnection(
+        checkIn: DailyCheckIn,
+        todayHealth: HealthSnapshot?,
+        correlations: [Correlation]
+    ) async throws -> String? {
+        ConnectionNarrator.todayConnection(
+            checkIn: checkIn,
+            todayHealth: todayHealth,
+            correlations: correlations
+        )
     }
 }

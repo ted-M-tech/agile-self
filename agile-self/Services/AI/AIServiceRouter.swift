@@ -92,4 +92,25 @@ final class AIServiceRouter: AIServiceProtocol, @unchecked Sendable {
     nonisolated func generatePatterns(from checkIns: [DailyCheckIn]) async throws -> [String] {
         try await localService.generatePatterns(from: checkIns)
     }
+
+    /// Connections always run on-device: the numbers are deterministic (AnalyticsService) and
+    /// the prose stays local (heuristic, or the on-device Foundation Models LLM when available).
+    nonisolated func generateConnections(
+        checkIns: [DailyCheckIn],
+        health: [HealthSnapshot]
+    ) async throws -> [String] {
+        try await localService.generateConnections(checkIns: checkIns, health: health)
+    }
+
+    nonisolated func generateTodayConnection(
+        checkIn: DailyCheckIn,
+        todayHealth: HealthSnapshot?,
+        correlations: [Correlation]
+    ) async throws -> String? {
+        try await localService.generateTodayConnection(
+            checkIn: checkIn,
+            todayHealth: todayHealth,
+            correlations: correlations
+        )
+    }
 }

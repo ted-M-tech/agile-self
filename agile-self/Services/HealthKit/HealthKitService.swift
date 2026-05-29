@@ -8,6 +8,7 @@
 
 import Foundation
 import HealthKit
+import os
 
 /// Provides read-only access to HealthKit data for building daily HealthSnapshot models.
 ///
@@ -146,6 +147,7 @@ final class HealthKitService {
         // HealthKit never reports read-authorization status, so infer access from whether
         // any metric returned data. Denial / no data → isAuthorized stays false, UI degrades.
         isAuthorized = snapshot.hasAnyMetric
+        AppLog.health.notice("fetch sleep=\(sleep != nil, privacy: .public) steps=\(stepsValue != nil, privacy: .public) cals=\(caloriesValue != nil, privacy: .public) exercise=\(exerciseValue != nil, privacy: .public) hr=\(heartRateValue != nil, privacy: .public) dist=\(distanceValue != nil, privacy: .public) anyMetric=\(snapshot.hasAnyMetric, privacy: .public) (sim/no-data → all false)")
         return snapshot
     }
 

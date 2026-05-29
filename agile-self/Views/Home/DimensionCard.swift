@@ -16,12 +16,12 @@ struct DimensionCard: View {
 
     private var progress: Double {
         guard let score else { return 0 }
-        return Double(score) / 10.0
+        return Double(score) / 5.0
     }
 
     private var accessibilityText: String {
         guard let score else { return "\(dimension.label): no data yet" }
-        return "\(dimension.label) score: \(score) out of 10"
+        return "\(dimension.label) score: \(score) out of 5"
     }
 
     private var dimensionColor: Color {
@@ -75,7 +75,7 @@ struct DimensionCard: View {
                             .foregroundStyle(Theme.Colors.textTertiary)
                     }
 
-                    Text("/10")
+                    Text("/5")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textTertiary)
                 }

@@ -40,14 +40,15 @@ enum MockData {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
 
-        let scores: [(energy: Int, focus: Int, stress: Int, growth: Int, note: String?, insight: String?)] = [
-            (6, 5, 6, 5, nil, nil),
-            (7, 6, 4, 6, nil, nil),
-            (5, 7, 5, 7, nil, nil),
-            (6, 6, 5, 6, nil, nil),
-            (8, 7, 3, 8, nil, nil),
-            (7, 8, 4, 7, nil, nil),
-            (8, 7, 3, 9,
+        // 3rd value is Calm (high = calm/good), stored under stressScore. Scores are 1–5.
+        let scores: [(energy: Int, focus: Int, calm: Int, growth: Int, note: String?, insight: String?)] = [
+            (3, 3, 3, 3, nil, nil),
+            (4, 3, 4, 3, nil, nil),
+            (3, 4, 3, 4, nil, nil),
+            (3, 3, 3, 3, nil, nil),
+            (4, 4, 4, 4, nil, nil),
+            (4, 4, 4, 4, nil, nil),
+            (4, 4, 5, 5,
              "Great day! Finished the design spec and went for a run.",
              "Your focus tends to dip on Wednesdays. Consider a midweek reset ritual."),
         ]
@@ -58,7 +59,7 @@ enum MockData {
                 date: date,
                 energyScore: s.energy,
                 focusScore: s.focus,
-                stressScore: s.stress,
+                stressScore: s.calm,
                 growthScore: s.growth,
                 note: s.note,
                 dailyInsight: s.insight,
@@ -74,17 +75,18 @@ enum MockData {
 
         return (0..<30).map { daysAgo in
             let date = calendar.date(byAdding: .day, value: -(29 - daysAgo), to: today)!
-            // Generate plausible scores with some variance
-            let baseEnergy = 6 + (daysAgo % 3)
-            let baseFocus = 5 + (daysAgo % 4)
-            let baseStress = 3 + (daysAgo % 5)
-            let baseGrowth = 6 + (daysAgo % 3)
+            // Generate plausible 1–5 scores with some variance. baseCalm is the Calm axis
+            // (high = good), stored under stressScore.
+            let baseEnergy = 3 + (daysAgo % 2)
+            let baseFocus = 2 + (daysAgo % 3)
+            let baseCalm = 3 + (daysAgo % 2)
+            let baseGrowth = 3 + (daysAgo % 2)
             return DailyCheckIn(
                 date: date,
-                energyScore: min(baseEnergy, 10),
-                focusScore: min(baseFocus, 10),
-                stressScore: min(baseStress, 10),
-                growthScore: min(baseGrowth, 10),
+                energyScore: min(baseEnergy, 5),
+                focusScore: min(baseFocus, 5),
+                stressScore: min(baseCalm, 5),
+                growthScore: min(baseGrowth, 5),
                 createdAt: date
             )
         }
@@ -121,7 +123,7 @@ enum MockData {
         report.setCorrelations([
             Correlation(factor1: "Sleep", factor2: "Focus", coefficient: 0.72, description: "Sleep\u{2191} = Focus\u{2191}"),
             Correlation(factor1: "Exercise", factor2: "Energy", coefficient: 0.68, description: "Exercise\u{2191} = Energy\u{2191}"),
-            Correlation(factor1: "Screen Time", factor2: "Stress", coefficient: 0.54, description: "Screen Time\u{2191} = Stress\u{2191}"),
+            Correlation(factor1: "Screen Time", factor2: "Calm", coefficient: -0.54, description: "Screen Time\u{2191} = Calm\u{2193}"),
             Correlation(factor1: "Running", factor2: "Growth", coefficient: 0.61, description: "Running\u{2191} = Growth\u{2191}"),
         ])
         return report
@@ -235,14 +237,15 @@ enum MockData {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
 
-        let scores: [(energy: Int, focus: Int, stress: Int, growth: Int)] = [
-            (6, 5, 6, 5),
-            (7, 6, 4, 6),
-            (5, 7, 5, 7),
-            (6, 6, 5, 6),
-            (8, 7, 3, 8),
-            (7, 8, 4, 7),
-            (8, 7, 3, 9),
+        // 3rd value is Calm (high = calm/good), stored under stressScore. Scores are 1–5.
+        let scores: [(energy: Int, focus: Int, calm: Int, growth: Int)] = [
+            (3, 3, 3, 3),
+            (4, 3, 4, 3),
+            (3, 4, 3, 4),
+            (3, 3, 3, 3),
+            (4, 4, 4, 4),
+            (4, 4, 4, 4),
+            (4, 4, 5, 5),
         ]
 
         for (index, s) in scores.enumerated() {
@@ -251,7 +254,7 @@ enum MockData {
                 date: date,
                 energyScore: s.energy,
                 focusScore: s.focus,
-                stressScore: s.stress,
+                stressScore: s.calm,
                 growthScore: s.growth,
                 note: index == 6 ? "Great day! Finished the design spec and went for a run." : nil,
                 dailyInsight: index == 6 ? "Your focus tends to dip on Wednesdays. Consider a midweek reset ritual." : nil,
@@ -313,7 +316,7 @@ enum MockData {
             ConversationMessage(role: .user, content: "I think running regularly helped my energy a lot"),
             ConversationMessage(role: .assistant, content: "The data supports that. On days you ran, your energy was 1.8 points higher on average. Your focus also improved by 1.2 points on run days. Want to set a running target for next week?"),
             ConversationMessage(role: .user, content: "Yes, I'd like to run at least 3 times"),
-            ConversationMessage(role: .assistant, content: "Perfect. I noticed your stress peaked on Wednesday (7/10). What happened?"),
+            ConversationMessage(role: .assistant, content: "Perfect. I noticed your calm dipped on Wednesday (2/5). What happened?"),
             ConversationMessage(role: .user, content: "Back-to-back meetings all day, no breaks"),
         ]
         review.setConversations(messages)
@@ -333,7 +336,7 @@ enum MockData {
         let correlations: [Correlation] = [
             Correlation(factor1: "Sleep", factor2: "Focus", coefficient: 0.72, description: "Sleep\u{2191} = Focus\u{2191}"),
             Correlation(factor1: "Exercise", factor2: "Energy", coefficient: 0.68, description: "Exercise\u{2191} = Energy\u{2191}"),
-            Correlation(factor1: "Screen Time", factor2: "Stress", coefficient: 0.54, description: "Screen Time\u{2191} = Stress\u{2191}"),
+            Correlation(factor1: "Screen Time", factor2: "Calm", coefficient: -0.54, description: "Screen Time\u{2191} = Calm\u{2193}"),
             Correlation(factor1: "Running", factor2: "Growth", coefficient: 0.61, description: "Running\u{2191} = Growth\u{2191}"),
         ]
         report.setCorrelations(correlations)

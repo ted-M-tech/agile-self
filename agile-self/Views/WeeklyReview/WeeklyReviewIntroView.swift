@@ -94,47 +94,90 @@ struct WeeklyReviewIntroView: View {
                     .foregroundStyle(Theme.Colors.textPrimary)
             }
 
-            Chart(checkIns, id: \.id) { checkIn in
-                LineMark(
-                    x: .value("Day", checkIn.date, unit: .day),
-                    y: .value("Score", checkIn.compositeScore)
-                )
-                .foregroundStyle(Theme.Colors.accentStart)
-                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
-                .interpolationMethod(.catmullRom)
-
-                AreaMark(
-                    x: .value("Day", checkIn.date, unit: .day),
-                    y: .value("Score", checkIn.compositeScore)
-                )
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [
-                            Theme.Colors.accentStart.opacity(0.3),
-                            Theme.Colors.accentStart.opacity(0.0),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .interpolationMethod(.catmullRom)
+            if checkIns.count <= 1 {
+                sparklineSinglePoint
+            } else {
+                sparkline
             }
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .day)) { value in
-                    AxisValueLabel {
-                        if let date = value.as(Date.self) {
-                            Text(date.formatted(.dateTime.weekday(.narrow)))
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                        }
+        }
+        .cardStyle()
+    }
+
+    private var sparklineDates: [Date] { checkIns.map(\.date) }
+
+    /// True sparkline: pinned domain, always-visible points, minimal weekday
+    /// labels strided so they never repeat/garble.
+    private var sparkline: some View {
+        Chart(checkIns, id: \.id) { checkIn in
+            LineMark(
+                x: .value("Day", checkIn.date, unit: .day),
+                y: .value("Score", checkIn.compositeScore)
+            )
+            .foregroundStyle(Theme.Colors.accentStart)
+            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+            .interpolationMethod(.catmullRom)
+
+            AreaMark(
+                x: .value("Day", checkIn.date, unit: .day),
+                y: .value("Score", checkIn.compositeScore)
+            )
+            .foregroundStyle(
+                LinearGradient(
+                    colors: [
+                        Theme.Colors.accentStart.opacity(0.3),
+                        Theme.Colors.accentStart.opacity(0.0),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .interpolationMethod(.catmullRom)
+
+            PointMark(
+                x: .value("Day", checkIn.date, unit: .day),
+                y: .value("Score", checkIn.compositeScore)
+            )
+            .foregroundStyle(Theme.Colors.accentStart)
+            .symbolSize(16)
+        }
+        .chartXScale(domain: ChartAxis.dateDomain(for: sparklineDates))
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day, count: ChartAxis.dayStride(for: sparklineDates, desiredCount: 7))) { value in
+                AxisValueLabel {
+                    if let date = value.as(Date.self) {
+                        Text(date.formatted(.dateTime.weekday(.narrow)))
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textTertiary)
                     }
                 }
             }
-            .chartYAxis(.hidden)
-            .chartYScale(domain: 1...10)
-            .frame(height: 100)
         }
-        .cardStyle()
+        .chartYAxis(.hidden)
+        .chartYScale(domain: 1...5)
+        .frame(height: 100)
+    }
+
+    /// 0–1 points: render the lone point (if any) on a pinned axis with a hint.
+    private var sparklineSinglePoint: some View {
+        VStack(spacing: Theme.Spacing.xs) {
+            Chart(checkIns, id: \.id) { checkIn in
+                PointMark(
+                    x: .value("Day", checkIn.date, unit: .day),
+                    y: .value("Score", checkIn.compositeScore)
+                )
+                .foregroundStyle(Theme.Colors.accentEnd)
+                .symbolSize(50)
+            }
+            .chartXScale(domain: ChartAxis.dateDomain(for: sparklineDates))
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .chartYScale(domain: 1...5)
+            .frame(height: 76)
+
+            Text("Keep checking in to see your trend")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
     }
 
     // MARK: - Dimension Bars
@@ -156,7 +199,7 @@ struct WeeklyReviewIntroView: View {
 
     private func dimensionBarRow(_ dimension: DimensionType) -> some View {
         let avg = dimensionAverage(dimension)
-        let fraction = avg / 10.0
+        let fraction = avg / 5.0
 
         return HStack(spacing: Theme.Spacing.sm) {
             Image(systemName: dimension.icon)
@@ -191,7 +234,7 @@ struct WeeklyReviewIntroView: View {
                 .frame(width: 32, alignment: .trailing)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(dimension.label): average \(String(format: "%.1f", avg)) out of 10")
+        .accessibilityLabel("\(dimension.label): average \(String(format: "%.1f", avg)) out of 5")
     }
 
     // MARK: - Action Buttons

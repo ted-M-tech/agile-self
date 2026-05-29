@@ -25,8 +25,7 @@ struct AIInsightCard: View {
 
                 Text(insight)
                     .font(Theme.Typography.body)
-                    .italic()
-                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .foregroundStyle(Theme.Colors.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                     .lineSpacing(4)
             }

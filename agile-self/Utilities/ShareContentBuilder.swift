@@ -47,7 +47,7 @@ enum ShareContentBuilder {
         var lines: [String] = []
         lines.append("Monthly Report \u{2014} \(monthYear(month: report.month, year: report.year))")
         if let score = report.overallScore {
-            lines.append(String(format: "Overall Score: %.1f / 10", score))
+            lines.append(String(format: "Overall Score: %.1f / 5", score))
         }
         lines.append("Check-ins logged: \(checkIns.count)")
         lines.append("")

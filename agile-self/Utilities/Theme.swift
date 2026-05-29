@@ -180,11 +180,13 @@ enum DimensionType: String, CaseIterable, Codable, Identifiable {
 
     var id: String { rawValue }
 
+    // NOTE: the `.stress` case and rawValue "stress" are kept for data continuity. Its
+    // presentation is now Calm (high = better); higher always means better for all axes.
     var label: String {
         switch self {
         case .energy: return "Energy"
         case .focus: return "Focus"
-        case .stress: return "Stress"
+        case .stress: return "Calm"
         case .growth: return "Growth"
         }
     }
@@ -193,7 +195,7 @@ enum DimensionType: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .energy: return "Energy"
         case .focus: return "Focus"
-        case .stress: return "Stress"
+        case .stress: return "Calm"
         case .growth: return "Growth"
         }
     }
@@ -202,7 +204,7 @@ enum DimensionType: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .energy: return "sun.max.fill"
         case .focus: return "scope"
-        case .stress: return "bolt.heart.fill"
+        case .stress: return "wind"
         case .growth: return "leaf.fill"
         }
     }
@@ -211,14 +213,9 @@ enum DimensionType: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .energy: return "How's your energy today?"
         case .focus: return "How focused were you?"
-        case .stress: return "Stress level?"
+        case .stress: return "How calm did you feel?"
         case .growth: return "Did you grow today?"
         }
-    }
-
-    /// For stress, lower is better (inverted for composite scoring)
-    var isInverted: Bool {
-        self == .stress
     }
 }
 

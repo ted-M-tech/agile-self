@@ -40,7 +40,8 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
                 "day": index + 1,
                 "energy": checkIn.energyScore,
                 "focus": checkIn.focusScore,
-                "stress": checkIn.stressScore,
+                // Calm axis (high = calm/good); stored on-disk under stressScore.
+                "calm": checkIn.calmScore,
                 "growth": checkIn.growthScore,
                 "composite": checkIn.compositeScore,
             ]
@@ -72,9 +73,9 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
     nonisolated func generateDailyInsight(checkIn: DailyCheckIn) async throws -> String {
         // Daily insights are handled on-device; this is a fallback.
         let composite = checkIn.compositeScore
-        if composite >= 7.5 {
+        if composite >= 3.7 {
             return "Strong day across the board. Your consistency is building momentum."
-        } else if composite >= 5.5 {
+        } else if composite >= 2.8 {
             return "A balanced day. Look for small wins to build on tomorrow."
         } else {
             return "Everyone has off days. Focus on one small improvement tomorrow."
@@ -90,7 +91,7 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
         let _ = anonymize(checkIns: checkIns)
         let _ = anonymize(health: health)
 
-        let avgComposite = checkIns.isEmpty ? 5.0 :
+        let avgComposite = checkIns.isEmpty ? 3.0 :
             checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
 
         return [
@@ -108,7 +109,7 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
         checkIns: [DailyCheckIn]
     ) async throws -> WeeklySummaryResult {
         // Phase 2: Send conversation + anonymized data to Gemini for deep analysis.
-        let avgComposite = checkIns.isEmpty ? 5.0 :
+        let avgComposite = checkIns.isEmpty ? 3.0 :
             checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
 
         // Extract themes from conversation (placeholder logic)
@@ -124,10 +125,11 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
         }
 
         var challenges = [String]()
-        let avgStress = checkIns.isEmpty ? 5.0 :
+        // stressScore stores Calm (high = calm/good); low avg calm needs attention.
+        let avgCalm = checkIns.isEmpty ? 3.0 :
             Double(checkIns.map(\.stressScore).reduce(0, +)) / Double(checkIns.count)
-        if avgStress >= 5.0 {
-            challenges.append("Stress management needs attention (avg \(String(format: "%.1f", avgStress))/10)")
+        if avgCalm <= 2.5 {
+            challenges.append("Staying calm needs attention (avg \(String(format: "%.1f", avgCalm))/5)")
         }
         if checkIns.count < 7 {
             challenges.append("Missed \(7 - checkIns.count) day(s) of check-ins")
@@ -153,7 +155,7 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
         let _ = anonymize(checkIns: checkIns)
         let _ = anonymize(health: health)
 
-        let avgComposite = checkIns.isEmpty ? 5.0 :
+        let avgComposite = checkIns.isEmpty ? 3.0 :
             checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
 
         let correlations = [
@@ -171,9 +173,9 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
             ),
             Correlation(
                 factor1: "Screen Time",
-                factor2: "Stress",
-                coefficient: 0.54,
-                description: "Screen Time\u{2191} = Stress\u{2191}"
+                factor2: "Calm",
+                coefficient: -0.54,
+                description: "Screen Time\u{2191} = Calm\u{2193}"
             ),
         ]
 
@@ -196,5 +198,26 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
             "Sleep quality strongly shapes next-day stress.",
             "A midweek energy dip recurs in your data.",
         ]
+    }
+
+    /// Connections rely on deterministic correlation numbers, so this path mirrors the
+    /// on-device narrator (the cloud backend never invents the magnitudes).
+    nonisolated func generateConnections(
+        checkIns: [DailyCheckIn],
+        health: [HealthSnapshot]
+    ) async throws -> [String] {
+        ConnectionNarrator.connections(checkIns: checkIns, health: health)
+    }
+
+    nonisolated func generateTodayConnection(
+        checkIn: DailyCheckIn,
+        todayHealth: HealthSnapshot?,
+        correlations: [Correlation]
+    ) async throws -> String? {
+        ConnectionNarrator.todayConnection(
+            checkIn: checkIn,
+            todayHealth: todayHealth,
+            correlations: correlations
+        )
     }
 }

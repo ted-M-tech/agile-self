@@ -8,6 +8,12 @@
 
 import WidgetKit
 import SwiftUI
+import os
+
+// Widget-side diagnostics (own subsystem; stream with subsystem BEGINSWITH "tetsuya.agile-self").
+// This is the decisive M4 check: did the widget READ the shared App Group snapshot, or fall
+// back to .sample because the App Group entitlement is missing/empty?
+private let wlog = Logger(subsystem: "tetsuya.agile-self.AgileSelfWidget", category: "Widget")
 
 // MARK: - Snapshot (extension-side mirror of the app's WidgetSnapshot)
 // Kept as a minimal copy to avoid a shared-framework dependency for the PoC. The shape
@@ -28,17 +34,26 @@ struct WidgetSnapshot: Codable {
     static let defaultsKey = "widgetSnapshot.v1"
 
     static func load() -> WidgetSnapshot? {
-        guard let defaults = UserDefaults(suiteName: appGroupID),
-              let data = defaults.data(forKey: defaultsKey),
-              let snapshot = try? JSONDecoder().decode(WidgetSnapshot.self, from: data) else {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else {
+            wlog.error("load: UserDefaults(suiteName:\(appGroupID, privacy: .public)) is nil")
             return nil
         }
+        guard let data = defaults.data(forKey: defaultsKey) else {
+            wlog.notice("load: no data at key=\(defaultsKey, privacy: .public) → App Group empty or entitlement missing → using .sample")
+            return nil
+        }
+        guard let snapshot = try? JSONDecoder().decode(WidgetSnapshot.self, from: data) else {
+            wlog.error("load: decode failed (\(data.count, privacy: .public) bytes)")
+            return nil
+        }
+        wlog.notice("load: OK hasCheckIn=\(snapshot.hasCheckInToday, privacy: .public) composite=\(snapshot.compositeScore, privacy: .public) streak=\(snapshot.currentStreak, privacy: .public) (reading REAL shared data)")
         return snapshot
     }
 
+    // stressScore stores Calm (high = good); a good sample day has high calm. Scores are 1–5.
     static let sample = WidgetSnapshot(
-        date: Date(), hasCheckInToday: true, compositeScore: 7.4,
-        energyScore: 8, focusScore: 7, stressScore: 3, growthScore: 8,
+        date: Date(), hasCheckInToday: true, compositeScore: 4.25,
+        energyScore: 4, focusScore: 4, stressScore: 5, growthScore: 4,
         currentStreak: 12, updatedAt: Date()
     )
 }
@@ -161,7 +176,8 @@ struct AgileSelfWidgetEntryView: View {
             VStack(spacing: 7) {
                 dimRow("Energy", snapshot?.energyScore, WTheme.energy)
                 dimRow("Focus", snapshot?.focusScore, WTheme.focus)
-                dimRow("Stress", snapshot?.stressScore, WTheme.stress)
+                // stressScore now holds the Calm value (high = full bar = good).
+                dimRow("Calm", snapshot?.stressScore, WTheme.stress)
                 dimRow("Growth", snapshot?.growthScore, WTheme.growth)
             }
             .frame(maxWidth: .infinity)
@@ -178,7 +194,7 @@ struct AgileSelfWidgetEntryView: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(color.opacity(0.2)).frame(height: 5)
                     Capsule().fill(color)
-                        .frame(width: geo.size.width * CGFloat(value ?? 0) / 10.0, height: 5)
+                        .frame(width: geo.size.width * CGFloat(value ?? 0) / 5.0, height: 5)
                 }
             }
             .frame(height: 5)

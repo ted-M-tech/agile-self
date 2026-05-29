@@ -395,24 +395,29 @@ struct SettingsView: View {
             sectionHeader(title: "HEALTH & DATA")
 
             VStack(spacing: 0) {
-                // HealthKit row
+                // HealthKit row — reflect the REAL authorization state. HealthKit never
+                // reports read access directly, so isAuthorized is true only after a fetch
+                // returned at least one metric (see HealthKitService.fetchTodaySnapshot).
+                let healthConnected = appContainer.healthKitService.isAuthorized
                 statusRow(
                     icon: "heart.fill",
                     iconColor: .red,
                     label: "Health Data",
-                    statusText: "Connected",
-                    statusColor: Theme.Colors.success
+                    statusText: healthConnected ? "Connected" : "Not connected",
+                    statusColor: healthConnected ? Theme.Colors.success : Theme.Colors.textTertiary
                 )
 
                 settingsDivider
 
-                // Screen Time row
+                // Screen Time row — Family Controls / DeviceActivity requires a paid Apple
+                // Developer Program membership and is not enabled on this build, so report
+                // the truth rather than a fake "Connected".
                 statusRow(
                     icon: "hourglass",
                     iconColor: .cyan,
                     label: "Screen Time",
-                    statusText: "Connected",
-                    statusColor: Theme.Colors.success
+                    statusText: "Not available",
+                    statusColor: Theme.Colors.textTertiary
                 )
 
                 settingsDivider
@@ -686,11 +691,11 @@ struct SettingsView: View {
                     }
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Label("iCloud Sync", systemImage: "arrow.triangle.2.circlepath.icloud.fill")
+                        Label("No Cloud Sync", systemImage: "iphone.and.arrow.forward")
                             .font(Theme.Typography.headline)
                             .foregroundStyle(Theme.Colors.textPrimary)
 
-                        Text("If iCloud is enabled, your data is synced across your Apple devices using CloudKit. Apple encrypts this data in transit and at rest.")
+                        Text("Your data is stored locally on this device. Nothing is synced to the cloud, so it stays with you. If you remove the app, its data is removed too.")
                             .font(Theme.Typography.callout)
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }

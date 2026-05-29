@@ -88,28 +88,35 @@ struct TimePeriodFilteringTests {
     }
 }
 
-// MARK: - CheckInViewModel upsert (#6)
+// MARK: - Same-day check-in upsert (#6)
+//
+// CheckInViewModel was removed (dead code — the real save path lives in
+// DailyCheckInView, which is a SwiftUI View). The same-day upsert contract is now
+// verified through the shared persistence seam, WatchConnectivityService.handleCheckIn,
+// which mirrors DailyCheckInView.saveCheckIn (fetch-by-start-of-day, then update-or-insert).
 
 @MainActor
-struct CheckInViewModelUpsertTests {
+struct SameDayUpsertTests {
 
     @Test
     func savingTwiceSameDayKeepsOneRow() async throws {
         let container = try makeInMemoryContainer()
+        let service = WatchConnectivityService(modelContainer: container)
         let context = container.mainContext
 
-        let vm1 = CheckInViewModel()
-        vm1.energyScore = 8
-        vm1.focusScore = 7
-        vm1.stressScore = 3
-        vm1.growthScore = 9
-        await vm1.saveCheckIn(context: context)
+        _ = await withCheckedContinuation { continuation in
+            service.handleCheckIn(["type": "checkIn", "energy": 8, "focus": 7, "stress": 3, "growth": 9]) { reply in
+                continuation.resume(returning: reply)
+            }
+        }
         #expect(try context.fetch(FetchDescriptor<DailyCheckIn>()).count == 1)
 
         // Second save on the same day must UPDATE, not insert a duplicate.
-        let vm2 = CheckInViewModel()
-        vm2.energyScore = 5
-        await vm2.saveCheckIn(context: context)
+        _ = await withCheckedContinuation { continuation in
+            service.handleCheckIn(["type": "checkIn", "energy": 5, "focus": 5, "stress": 5, "growth": 5]) { reply in
+                continuation.resume(returning: reply)
+            }
+        }
 
         let rows = try context.fetch(FetchDescriptor<DailyCheckIn>())
         #expect(rows.count == 1)
@@ -242,8 +249,8 @@ struct FoundationModelsFallbackTests {
         // Correlation is not Equatable, so compare count against the deterministic source.
         let expected = AnalyticsService().detectCorrelations(checkIns: checkIns, health: health)
         #expect(result.correlations.count == expected.count)
-        // avgComposite for empty check-ins is 5.0 — the LLM never alters this number.
-        #expect(result.overallScore == 5.0)
+        // avgComposite for empty check-ins is 3.0 — the LLM never alters this number.
+        #expect(result.overallScore == 3.0)
     }
 }
 
@@ -266,10 +273,133 @@ struct VersionedSchemaTests {
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, migrationPlan: AppMigrationPlan.self, configurations: [config])
         let context = container.mainContext
-        context.insert(DailyCheckIn(energyScore: 7))
+        context.insert(DailyCheckIn(energyScore: 4))
         try context.save()
         let rows = try context.fetch(FetchDescriptor<DailyCheckIn>())
         #expect(rows.count == 1)
-        #expect(rows.first?.energyScore == 7)
+        #expect(rows.first?.energyScore == 4)
+    }
+}
+
+// MARK: - Mood ↔ Health connections (core differentiator)
+
+/// Deterministic coverage of `generateConnections` / `generateTodayConnection`. The OnDevice
+/// heuristic carries the real numbers (via ConnectionNarrator + AnalyticsService) and has no LLM
+/// dependency, so these run identically everywhere. The dataset mirrors the UITEST_SEED logic so
+/// the asserts double as a guarantee that seeded correlations actually surface.
+@MainActor
+struct MoodHealthConnectionTests {
+
+    /// Builds 8 days of check-ins + correlated HealthSnapshots, matching `seedSampleData`.
+    private func makeDataset() -> (checkIns: [DailyCheckIn], health: [HealthSnapshot]) {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let days: [(Int, Int, Int, Int)] = [
+            (3, 3, 2, 3), (3, 3, 4, 3), (2, 2, 2, 3), (4, 4, 4, 4),
+            (3, 3, 3, 3), (4, 4, 4, 4), (4, 4, 4, 5), (5, 4, 5, 5),
+        ]
+        var checkIns: [DailyCheckIn] = []
+        var health: [HealthSnapshot] = []
+        for (i, s) in days.enumerated() {
+            let date = cal.date(byAdding: .day, value: -(days.count - 1 - i), to: today) ?? today
+            checkIns.append(DailyCheckIn(
+                date: date, energyScore: s.0, focusScore: s.1, stressScore: s.2, growthScore: s.3
+            ))
+            let jitter = (i % 3) - 1
+            health.append(HealthSnapshot(
+                date: date,
+                sleepMinutes: 300 + s.1 * 36 + jitter * 8,
+                steps: 3000 + s.0 * 1500 + jitter * 300,
+                activeCalories: 200 + s.0 * 60,
+                exerciseMinutes: max(0, s.3 * 12 + jitter * 4),
+                restingHeartRate: 74 - s.2 * 3 + jitter,
+                runningDistanceMeters: Double(s.1 * 900 + jitter * 150)
+            ))
+        }
+        return (checkIns, health)
+    }
+
+    @Test
+    func seededDatasetSurfacesCorrelations() {
+        let (checkIns, health) = makeDataset()
+        let correlations = AnalyticsService().detectCorrelations(checkIns: checkIns, health: health)
+        // Seed values are engineered so the |r| >= 0.3 gate is comfortably cleared on multiple axes.
+        #expect(correlations.count >= 3)
+    }
+
+    @Test
+    func connectionsAreNarratedAndHonest() async throws {
+        let (checkIns, health) = makeDataset()
+        let connections = try await OnDeviceAIService().generateConnections(checkIns: checkIns, health: health)
+
+        #expect(!connections.isEmpty)
+        #expect(connections.count <= 3)
+        for sentence in connections {
+            #expect(!sentence.isEmpty)
+            // HONESTY: correlational language only — never causal.
+            let lower = sentence.lowercased()
+            #expect(!lower.contains("caused"))
+            #expect(!lower.contains("because"))
+            #expect(lower.contains("tends to") || lower.contains("line up") || lower.contains("lines up"))
+        }
+    }
+
+    @Test
+    func connectionsReturnEmptyWithoutEnoughData() async throws {
+        // One day of data → AnalyticsService gates out → honest empty (UI shows waiting copy).
+        let checkIn = DailyCheckIn(energyScore: 4, focusScore: 4, stressScore: 4, growthScore: 4)
+        let health = [HealthSnapshot(sleepMinutes: 450, steps: 9000)]
+        let connections = try await OnDeviceAIService().generateConnections(checkIns: [checkIn], health: health)
+        #expect(connections.isEmpty)
+    }
+
+    @Test
+    func todayConnectionUsesEstablishedCorrelation() async throws {
+        let (checkIns, health) = makeDataset()
+        let today = checkIns.last!
+        let todayHealth = health.last!
+        let correlations = AnalyticsService().detectCorrelations(checkIns: checkIns, health: health)
+
+        let sentence = try await OnDeviceAIService().generateTodayConnection(
+            checkIn: today,
+            todayHealth: todayHealth,
+            correlations: correlations
+        )
+
+        let unwrapped = try #require(sentence)
+        #expect(!unwrapped.isEmpty)
+        let lower = unwrapped.lowercased()
+        #expect(!lower.contains("caused"))
+        #expect(!lower.contains("because"))
+        // Mentions today's mood band wording ("Today's <Dimension>: …") when leaning on a correlation.
+        #expect(unwrapped.contains("Today's"))
+    }
+
+    @Test
+    func todayConnectionFallsBackToParallelObservation() async throws {
+        // Today health present but NO established correlations → neutral parallel observation.
+        let today = DailyCheckIn(energyScore: 3, focusScore: 3, stressScore: 3, growthScore: 3)
+        let todayHealth = HealthSnapshot(sleepMinutes: 443, steps: 8421)
+        let sentence = try await OnDeviceAIService().generateTodayConnection(
+            checkIn: today,
+            todayHealth: todayHealth,
+            correlations: []
+        )
+        let unwrapped = try #require(sentence)
+        // Parallel observation references the concrete metrics without claiming causation.
+        #expect(unwrapped.contains("Today you logged"))
+        #expect(unwrapped.contains("alongside"))
+        #expect(!unwrapped.lowercased().contains("because"))
+    }
+
+    @Test
+    func todayConnectionIsNilWithoutHealthData() async throws {
+        let today = DailyCheckIn(energyScore: 4, focusScore: 4, stressScore: 4, growthScore: 4)
+        let sentence = try await OnDeviceAIService().generateTodayConnection(
+            checkIn: today,
+            todayHealth: nil,
+            correlations: []
+        )
+        #expect(sentence == nil)
     }
 }

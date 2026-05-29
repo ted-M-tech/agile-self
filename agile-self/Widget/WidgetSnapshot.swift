@@ -13,7 +13,7 @@ struct WidgetSnapshot: Codable {
     /// Start-of-day this snapshot represents.
     var date: Date
     var hasCheckInToday: Bool
-    /// Composite score (1-10); 0 when no check-in yet today.
+    /// Composite score (1-5); 0 when no check-in yet today.
     var compositeScore: Double
     var energyScore: Int?
     var focusScore: Int?

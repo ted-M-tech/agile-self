@@ -44,7 +44,7 @@ struct PaywallView: View {
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
                     headerSection
-                    featureComparisonSection
+                    benefitsSection
                     pricingSection
                     subscribeButton
                     if let error = purchaseError {
@@ -99,11 +99,11 @@ struct PaywallView: View {
                 )
                 .accessibilityHidden(true)
 
-            Text("Unlock Premium")
+            Text("Become a Supporter")
                 .font(Theme.Typography.display)
                 .gradientText()
 
-            Text("Get the most out of your growth journey")
+            Text("Every feature is already yours. Premium keeps Agile Self growing.")
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
@@ -111,52 +111,20 @@ struct PaywallView: View {
         .frame(maxWidth: .infinity)
         .padding(.bottom, Theme.Spacing.sm)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Unlock Premium. Get the most out of your growth journey.")
+        .accessibilityLabel("Become a Supporter. Every feature is already yours. Premium keeps Agile Self growing.")
     }
 
-    // MARK: - Feature Comparison
+    // MARK: - Benefits
 
-    private var featureComparisonSection: some View {
+    private var benefitsSection: some View {
         VStack(spacing: 0) {
-            // Column headers
-            HStack {
-                Text("Features")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+            ForEach(Array(benefitRows.enumerated()), id: \.offset) { index, benefit in
+                benefitRow(benefit)
 
-                Spacer()
-
-                Text("Free")
-                    .font(Theme.Typography.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Theme.Colors.textTertiary)
-                    .frame(width: 64)
-
-                Text("Premium")
-                    .font(Theme.Typography.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Theme.Colors.accentEnd)
-                    .frame(width: 80)
-            }
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.md)
-
-            Divider()
-                .overlay(Theme.Colors.divider)
-
-            // Feature rows
-            ForEach(Array(featureRows.enumerated()), id: \.offset) { index, feature in
-                featureRow(
-                    name: feature.name,
-                    icon: feature.icon,
-                    freeValue: feature.freeValue,
-                    premiumValue: feature.premiumValue
-                )
-
-                if index < featureRows.count - 1 {
+                if index < benefitRows.count - 1 {
                     Divider()
                         .overlay(Theme.Colors.divider)
-                        .padding(.leading, Theme.Spacing.md + 24 + Theme.Spacing.sm)
+                        .padding(.leading, Theme.Spacing.md + 28 + Theme.Spacing.md)
                 }
             }
         }
@@ -164,55 +132,30 @@ struct PaywallView: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
     }
 
-    private func featureRow(
-        name: String,
-        icon: String,
-        freeValue: FeatureValue,
-        premiumValue: FeatureValue
-    ) -> some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .frame(width: 24, height: 24)
+    private func benefitRow(_ benefit: BenefitRowData) -> some View {
+        HStack(spacing: Theme.Spacing.md) {
+            Image(systemName: benefit.icon)
+                .font(.callout)
+                .foregroundStyle(Theme.Colors.accentEnd)
+                .frame(width: 28, height: 28)
 
-            Text(name)
-                .font(Theme.Typography.callout)
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(benefit.title)
+                    .font(Theme.Typography.headline)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+
+                Text(benefit.detail)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Spacer()
-
-            featureValueView(freeValue, isPremium: false)
-                .frame(width: 64)
-
-            featureValueView(premiumValue, isPremium: true)
-                .frame(width: 80)
         }
         .padding(.horizontal, Theme.Spacing.md)
-        .padding(.vertical, Theme.Spacing.sm + 2)
+        .padding(.vertical, Theme.Spacing.md)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(name). Free: \(freeValue.accessibilityText). Premium: \(premiumValue.accessibilityText)")
-    }
-
-    @ViewBuilder
-    private func featureValueView(_ value: FeatureValue, isPremium: Bool) -> some View {
-        switch value {
-        case .check:
-            Image(systemName: "checkmark")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(isPremium ? Theme.Colors.accentEnd : Theme.Colors.success)
-
-        case .limited(let text):
-            Text(text)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(isPremium ? Theme.Colors.accentEnd : Theme.Colors.textTertiary)
-
-        case .unavailable:
-            Text("\u{2014}")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textTertiary.opacity(0.5))
-        }
+        .accessibilityLabel("\(benefit.title). \(benefit.detail)")
     }
 
     // MARK: - Pricing Section
@@ -430,40 +373,33 @@ struct PaywallView: View {
     }
 }
 
-// MARK: - Feature Data
+// MARK: - Benefit Data
 
-private enum FeatureValue {
-    case check
-    case limited(String)
-    case unavailable
-
-    var accessibilityText: String {
-        switch self {
-        case .check: return "Available"
-        case .limited(let text): return text
-        case .unavailable: return "Not available"
-        }
-    }
-}
-
-private struct FeatureRowData {
-    let name: String
+private struct BenefitRowData {
     let icon: String
-    let freeValue: FeatureValue
-    let premiumValue: FeatureValue
+    let title: String
+    let detail: String
 }
 
-private let featureRows: [FeatureRowData] = [
-    FeatureRowData(name: "Daily Check-in", icon: "checkmark.circle", freeValue: .check, premiumValue: .check),
-    FeatureRowData(name: "Health Data", icon: "heart.fill", freeValue: .check, premiumValue: .check),
-    FeatureRowData(name: "AI Daily Insight", icon: "sparkles", freeValue: .check, premiumValue: .check),
-    FeatureRowData(name: "Weekly AI Review", icon: "bubble.left.and.text.bubble.right", freeValue: .limited("2/month"), premiumValue: .check),
-    FeatureRowData(name: "Monthly Report", icon: "doc.text.fill", freeValue: .limited("Summary"), premiumValue: .check),
-    FeatureRowData(name: "Trend Charts", icon: "chart.xyaxis.line", freeValue: .limited("7 days"), premiumValue: .check),
-    FeatureRowData(name: "Correlations", icon: "arrow.triangle.branch", freeValue: .unavailable, premiumValue: .check),
-    FeatureRowData(name: "Actions", icon: "checklist", freeValue: .limited("3 max"), premiumValue: .check),
-    FeatureRowData(name: "Widgets", icon: "rectangle.on.rectangle", freeValue: .limited("Small"), premiumValue: .check),
-    FeatureRowData(name: "Export", icon: "square.and.arrow.up", freeValue: .unavailable, premiumValue: .check),
+// Honest framing: nothing is locked. Every feature ships to everyone today; Premium is an
+// optional supporter tier that funds development and is where future premium-only
+// capabilities will live. Do NOT advertise limits that the app does not enforce.
+private let benefitRows: [BenefitRowData] = [
+    BenefitRowData(
+        icon: "checkmark.seal.fill",
+        title: "Everything, included",
+        detail: "Check-ins, health insights, weekly reviews, reports, charts, and widgets — all of it."
+    ),
+    BenefitRowData(
+        icon: "heart.fill",
+        title: "Support an indie developer",
+        detail: "Agile Self is built by one person. Your subscription keeps the lights on."
+    ),
+    BenefitRowData(
+        icon: "sparkles",
+        title: "Early access to new features",
+        detail: "Help shape what comes next and try new capabilities first."
+    ),
 ]
 
 // MARK: - Preview

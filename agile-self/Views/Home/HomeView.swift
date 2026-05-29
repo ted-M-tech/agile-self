@@ -12,9 +12,13 @@ import Charts
 struct HomeView: View {
     @Environment(AppContainer.self) private var appContainer
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
 
     let onShowSettings: () -> Void
     let onLogCheckIn: () -> Void
+    /// Changes whenever the check-in cover dismisses; triggers a reload so a just-saved
+    /// check-in is reflected immediately (CTA → "Today's score", rings, trend).
+    var refreshToken: Int = 0
 
     // MARK: - ViewModel
 
@@ -24,11 +28,23 @@ struct HomeView: View {
 
     @State private var dimensionsAppeared = false
     @State private var ctaPulse = false
+    /// Bumped when the app returns to the foreground so the greeting/date/trend recompute
+    /// after a day boundary (e.g. crossing midnight while backgrounded).
+    @State private var dayRefreshToken = 0
+    /// The calendar day Home last rendered; used to detect a midnight rollover cheaply.
+    @State private var lastRenderedDay = Calendar.current.startOfDay(for: Date())
 
     // MARK: - Computed
 
+    /// Reads `dayRefreshToken` so the time-derived greeting/date recompute when the token is
+    /// bumped on foreground (post-midnight). Returns `now` for the actual computations.
+    private var now: Date {
+        _ = dayRefreshToken
+        return Date()
+    }
+
     private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
+        let hour = Calendar.current.component(.hour, from: now)
         switch hour {
         case 5..<12: return "Good morning"
         case 12..<17: return "Good afternoon"
@@ -38,11 +54,11 @@ struct HomeView: View {
     }
 
     private var formattedDate: String {
-        Date().formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
+        now.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
     }
 
     private var isEvening: Bool {
-        Calendar.current.component(.hour, from: Date()) >= 20
+        Calendar.current.component(.hour, from: now) >= 20
     }
 
     private var shouldShowCTAPulse: Bool {
@@ -57,11 +73,14 @@ struct HomeView: View {
                         errorStateView(message: error)
                     } else if viewModel.isLoading {
                         loadingStateView
+                    } else if !viewModel.hasAnyCheckIn {
+                        firstRunHero
                     } else {
                         headerSection
                         scoreTrendSection
                         dimensionGridSection
                         aiInsightSection
+                        todayConnectionSection
                         healthSection
                         checkInCTA
                     }
@@ -93,6 +112,24 @@ struct HomeView: View {
                 )
                 viewModel.loadData(context: modelContext)
                 await viewModel.loadHealthData(context: modelContext)
+            }
+            .onChange(of: refreshToken) {
+                // Reload after a check-in (the cover dismissed) so Home reflects it at once —
+                // both the check-in data AND health (a saved check-in may have refreshed metrics).
+                viewModel.loadData(context: modelContext)
+                Task { await viewModel.loadHealthData(context: modelContext) }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                // Recompute the greeting/date on every foreground (cheap). If the calendar day
+                // actually changed while backgrounded, also reload data so the trend reflects it.
+                dayRefreshToken &+= 1
+                let today = Calendar.current.startOfDay(for: Date())
+                if today != lastRenderedDay {
+                    lastRenderedDay = today
+                    viewModel.loadData(context: modelContext)
+                    Task { await viewModel.loadHealthData(context: modelContext) }
+                }
             }
         }
     }
@@ -144,9 +181,18 @@ struct HomeView: View {
 
     // MARK: - 1. Header
 
+    /// "Good morning, Alex" when a real name exists; just "Good morning" otherwise
+    /// (no awkward ", there" fallback).
+    private var greetingLine: String {
+        if let name = viewModel.displayName {
+            return "\(greeting), \(name)"
+        }
+        return greeting
+    }
+
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("\(greeting), \(viewModel.userName)")
+            Text(greetingLine)
                 .font(Theme.Typography.title2)
                 .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -156,6 +202,77 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, Theme.Spacing.sm)
+    }
+
+    // MARK: - First-Run Hero
+
+    /// Shown only when the user has never logged a check-in. The trend chart, four rings,
+    /// AI placeholder, health card, and today-summary are intentionally hidden here.
+    private var firstRunHero: some View {
+        VStack(spacing: Theme.Spacing.lg) {
+            headerSection
+
+            ZStack {
+                // Soft glow drawn as a separate blurred disc so the shadow reads as light,
+                // not a muddy halo over the translucent fill (cleaner in dark mode).
+                Circle()
+                    .fill(Theme.Colors.accentStart)
+                    .opacity(0.18)
+                    .blur(radius: 28)
+                    .frame(width: 140, height: 140)
+
+                Circle()
+                    .fill(Theme.Colors.backgroundSecondary)
+                    .overlay(
+                        Circle()
+                            .stroke(Theme.Colors.accentGradient, lineWidth: 2)
+                    )
+
+                Image(systemName: "sparkles")
+                    .font(.system(size: 44, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.accentStart)
+            }
+            .frame(width: 120, height: 120)
+            .padding(.top, Theme.Spacing.lg)
+
+            Text("Let's take your first check-in")
+                .font(Theme.Typography.title2)
+                .multilineTextAlignment(.center)
+                .gradientText()
+
+            Text("Four quick questions about today — Energy, Focus, Calm, and Growth. About 15 seconds. Your trend starts the moment you finish.")
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Theme.Spacing.sm)
+
+            Button(action: onLogCheckIn) {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Image(systemName: "pencil.line")
+                    // Wording mirrors onboarding's "Start First Check-in" CTA for consistency.
+                    Text("Start First Check-in")
+                }
+                .primaryButtonStyle()
+            }
+            .buttonStyle(.plain)
+            // Keep this exact label — UI tests tap app.buttons["Start my first check-in"].
+            .accessibilityLabel("Start my first check-in")
+
+            Text("15 sec · 4 questions · every day")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            // Subtle secondary affordance — the tab bar is the real path to explore, this just
+            // makes that discoverable instead of leaving the hero feeling like a dead end.
+            Text("Or explore Insights and your Profile from the tabs below.")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.top, Theme.Spacing.xs)
+                .padding(.horizontal, Theme.Spacing.md)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, Theme.Spacing.lg)
     }
 
     // MARK: - 2. Score Trend
@@ -195,6 +312,17 @@ struct HomeView: View {
         AIInsightCard(insight: viewModel.todayCheckIn?.dailyInsight)
     }
 
+    // MARK: - 4b. Today's Connection (mood ↔ health)
+
+    /// Renders nothing unless there's a connection sentence (which needs a check-in AND today
+    /// health data), so the simulator-without-seed and real-no-Health cases stay clean.
+    private var todayConnectionSection: some View {
+        TodayConnectionCard(
+            connection: viewModel.todayConnection,
+            health: viewModel.todayHealth
+        )
+    }
+
     // MARK: - 5. Health Metrics
 
     private var healthSection: some View {
@@ -218,11 +346,13 @@ struct HomeView: View {
                             )
                         }
                         if let score = health.sleepScore,
-                           let label = health.sleepQualityLabel {
+                           let quality = health.sleepQualityLabel {
+                            // Sits next to the "Sleep" duration card — label it "Sleep Quality"
+                            // and lead with the quality word so a bare 0-100 isn't ambiguous.
                             HealthMetricCard(
                                 icon: "moon.stars.fill",
-                                value: "\(score)",
-                                label: label,
+                                value: "\(quality) · \(score)",
+                                label: "Sleep Quality",
                                 color: Theme.Colors.sleep
                             )
                         }
@@ -269,30 +399,69 @@ struct HomeView: View {
         }
     }
 
+    /// Title shown when there's no health data — distinguishes a fetch error, "not yet
+    /// authorized", and "authorized but nothing logged today".
+    private var noHealthTitle: String {
+        if viewModel.healthErrorMessage != nil {
+            return "Health unavailable"
+        }
+        return viewModel.isHealthAuthorized ? "No health data for today yet" : "Connect Apple Health"
+    }
+
+    /// Detail copy paired with `noHealthTitle`.
+    private var noHealthDetail: String {
+        if let error = viewModel.healthErrorMessage {
+            return error
+        }
+        return viewModel.isHealthAuthorized
+            ? "Metrics appear here as your day is recorded. Pull to refresh anytime."
+            : "Allow Health access to see your sleep, steps, and more."
+    }
+
+    /// Refresh-button label: prompts to grant access when not yet authorized, otherwise refreshes.
+    private var noHealthButtonTitle: String {
+        viewModel.isHealthAuthorized ? "Refresh" : "Allow Health Access"
+    }
+
     private var noHealthDataView: some View {
         VStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: "heart.slash")
+            Image(systemName: viewModel.healthErrorMessage != nil ? "heart.slash" : "heart.text.square")
                 .font(.title3)
-                .foregroundStyle(Theme.Colors.textTertiary)
-            Text("No health data available")
+                .foregroundStyle(Theme.Colors.textSecondary)
+            Text(noHealthTitle)
                 .font(Theme.Typography.callout)
-                .foregroundStyle(Theme.Colors.textTertiary)
-            Text("Allow Health access, then pull to refresh")
+                .foregroundStyle(Theme.Colors.textSecondary)
+            Text(noHealthDetail)
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textTertiary)
                 .multilineTextAlignment(.center)
             Button {
-                Task { await viewModel.loadHealthData(context: modelContext) }
+                // Not authorized → (re)request access then fetch. Authorized → just refetch.
+                // Either way the in-flight spinner gives the tap visible feedback.
+                Task {
+                    await viewModel.loadHealthData(
+                        context: modelContext,
+                        requestAuthorization: !viewModel.isHealthAuthorized
+                    )
+                }
             } label: {
-                Text("Refresh")
-                    .secondaryButtonStyle()
+                Group {
+                    if viewModel.isLoadingHealth {
+                        ProgressView()
+                            .tint(Theme.Colors.accentStart)
+                    } else {
+                        Text(noHealthButtonTitle)
+                    }
+                }
+                .secondaryButtonStyle()
             }
+            .disabled(viewModel.isLoadingHealth)
             .padding(.top, Theme.Spacing.xs)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.lg)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("No health data available. Allow Health access, then pull to refresh.")
+        .accessibilityLabel("\(noHealthTitle). \(noHealthDetail)")
     }
 
     // MARK: - 6. Check-in CTA
@@ -314,13 +483,19 @@ struct HomeView: View {
                     .font(.title3)
                     .foregroundStyle(Theme.Colors.success)
 
-                Text("Today's Score: \(String(format: "%.1f", checkIn.compositeScore))")
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Today's Score: \(String(format: "%.1f", checkIn.compositeScore))")
+                        .font(Theme.Typography.headline)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+
+                    Text("Tap to edit your check-in")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
 
                 Spacer()
 
-                Image(systemName: "chevron.right")
+                Image(systemName: "pencil")
                     .font(.caption)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
@@ -329,7 +504,10 @@ struct HomeView: View {
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Today's score is \(String(format: "%.1f", checkIn.compositeScore)). Tap to view details.")
+        // Keep the "Today's score is …" prefix — UI tests match buttons by this prefix.
+        // Hint now reflects the real (edit) behavior instead of claiming "view details".
+        .accessibilityLabel("Today's score is \(String(format: "%.1f", checkIn.compositeScore)).")
+        .accessibilityHint("Tap to edit your check-in")
     }
 
     private var logCheckInButton: some View {

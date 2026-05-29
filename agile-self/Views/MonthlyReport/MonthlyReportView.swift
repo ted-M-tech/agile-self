@@ -202,14 +202,35 @@ struct MonthlyReportView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.md)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Overall monthly score: \(String(format: "%.1f", report?.overallScore ?? 0)) out of 10")
+        .accessibilityLabel("Overall monthly score: \(String(format: "%.1f", report?.overallScore ?? 0)) out of 5")
     }
 
     private var ringProgress: Double {
-        (report?.overallScore ?? 0) / 10.0
+        (report?.overallScore ?? 0) / 5.0
     }
 
     // MARK: - 2. Trend Chart (4-axis, 30 days)
+
+    private var chartDates: [Date] { checkIns.map(\.date) }
+
+    /// Pin to a full 30-day window so the month chart never crowds/garbles and
+    /// reads consistently regardless of how many days were logged. The window
+    /// ends at the latest check-in (or today) and spans 30 days back.
+    private var chartDomain: ClosedRange<Date> {
+        let calendar = Calendar.current
+        let end = chartDates.max().map(calendar.startOfDay(for:)) ?? calendar.startOfDay(for: Date())
+        let start = calendar.date(byAdding: .day, value: -29, to: end) ?? end
+        // If real data starts later than the 30-day floor, still honor the
+        // earliest point so a single day pads sensibly.
+        let earliest = chartDates.min().map(calendar.startOfDay(for:)) ?? start
+        let lower = min(start, earliest)
+        guard lower < end else {
+            let lo = calendar.date(byAdding: .hour, value: -12, to: end) ?? end
+            let hi = calendar.date(byAdding: .hour, value: 12, to: end) ?? end
+            return lo ... hi
+        }
+        return lower ... end
+    }
 
     private var trendChartSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -227,11 +248,20 @@ struct MonthlyReportView: View {
                             .foregroundStyle(Theme.Dimension.color(for: dimension))
                             .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round))
                             .interpolationMethod(.catmullRom)
+
+                            // Visible point so a single day (or gaps) still show.
+                            PointMark(
+                                x: .value("Day", checkIn.date, unit: .day),
+                                y: .value(dimension.label, Double(checkIn.score(for: dimension)))
+                            )
+                            .foregroundStyle(Theme.Dimension.color(for: dimension))
+                            .symbolSize(checkIns.count <= 1 ? 36 : 10)
                         }
                     }
                 }
+                .chartXScale(domain: chartDomain)
                 .chartXAxis {
-                    AxisMarks(values: .automatic) { value in
+                    AxisMarks(values: .stride(by: .day, count: ChartAxis.dayStride(for: chartDates, desiredCount: 6))) { value in
                         AxisValueLabel {
                             if let date = value.as(Date.self) {
                                 Text(date.formatted(.dateTime.day()))
@@ -242,7 +272,7 @@ struct MonthlyReportView: View {
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .leading, values: [2, 4, 6, 8, 10]) { value in
+                    AxisMarks(position: .leading, values: [1, 2, 3, 4, 5]) { value in
                         AxisValueLabel {
                             if let intValue = value.as(Int.self) {
                                 Text("\(intValue)")
@@ -254,7 +284,7 @@ struct MonthlyReportView: View {
                             .foregroundStyle(Theme.Colors.divider)
                     }
                 }
-                .chartYScale(domain: 1...10)
+                .chartYScale(domain: 1...5)
                 .frame(height: 200)
             }
 

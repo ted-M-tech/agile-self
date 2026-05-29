@@ -39,23 +39,23 @@ struct WatchConnectivityServicePersistTests {
         let context = container.mainContext
 
         let reply = try service.persistCheckIn(
-            energy: 8, focus: 7, stress: 3, growth: 9,
+            energy: 4, focus: 4, stress: 2, growth: 5,
             context: context
         )
 
         // Verify check-in was created
         let checkIns = try context.fetch(FetchDescriptor<DailyCheckIn>())
         #expect(checkIns.count == 1)
-        #expect(checkIns[0].energyScore == 8)
-        #expect(checkIns[0].focusScore == 7)
-        #expect(checkIns[0].stressScore == 3)
-        #expect(checkIns[0].growthScore == 9)
+        #expect(checkIns[0].energyScore == 4)
+        #expect(checkIns[0].focusScore == 4)
+        #expect(checkIns[0].stressScore == 2)
+        #expect(checkIns[0].growthScore == 5)
 
         // Verify reply
         let score = reply["compositeScore"] as? Double
         #expect(score != nil)
-        // (8 + 7 + (11-3) + 9) / 4.0 = (8 + 7 + 8 + 9) / 4.0 = 8.0
-        #expect(score == 8.0)
+        // Plain mean: (4 + 4 + 2 + 5) / 4.0 = 15 / 4.0 = 3.75
+        #expect(score == 3.75)
 
         let streak = reply["currentStreak"] as? Int
         #expect(streak == 1)
@@ -75,21 +75,21 @@ struct WatchConnectivityServicePersistTests {
 
         // Second check-in (same day, should upsert)
         let reply = try service.persistCheckIn(
-            energy: 9, focus: 8, stress: 2, growth: 10,
+            energy: 5, focus: 4, stress: 2, growth: 5,
             context: context
         )
 
         // Still only one check-in
         let checkIns = try context.fetch(FetchDescriptor<DailyCheckIn>())
         #expect(checkIns.count == 1)
-        #expect(checkIns[0].energyScore == 9)
-        #expect(checkIns[0].focusScore == 8)
+        #expect(checkIns[0].energyScore == 5)
+        #expect(checkIns[0].focusScore == 4)
         #expect(checkIns[0].stressScore == 2)
-        #expect(checkIns[0].growthScore == 10)
+        #expect(checkIns[0].growthScore == 5)
 
-        // Composite: (9 + 8 + 9 + 10) / 4.0 = 9.0
+        // Plain mean: (5 + 4 + 2 + 5) / 4.0 = 16 / 4.0 = 4.0
         let score = reply["compositeScore"] as? Double
-        #expect(score == 9.0)
+        #expect(score == 4.0)
     }
 
     @Test
@@ -159,12 +159,12 @@ struct WatchConnectivityServicePersistTests {
         let context = container.mainContext
 
         let reply = try service.persistCheckIn(
-            energy: 3, focus: 7, stress: 9, growth: 4,
+            energy: 3, focus: 4, stress: 5, growth: 2,
             context: context
         )
 
         // Verify the reply's composite score matches what DailyCheckIn would compute
-        let reference = DailyCheckIn(energyScore: 3, focusScore: 7, stressScore: 9, growthScore: 4)
+        let reference = DailyCheckIn(energyScore: 3, focusScore: 4, stressScore: 5, growthScore: 2)
         let replyScore = reply["compositeScore"] as! Double
         #expect(replyScore == reference.compositeScore)
     }
@@ -176,12 +176,12 @@ struct WatchConnectivityServicePersistTests {
         let context = container.mainContext
 
         let reply = try service.persistCheckIn(
-            energy: 1, focus: 1, stress: 10, growth: 1,
+            energy: 1, focus: 1, stress: 5, growth: 1,
             context: context
         )
 
-        // (1 + 1 + (11-10) + 1) / 4.0 = 4/4 = 1.0
-        #expect(reply["compositeScore"] as? Double == 1.0)
+        // Plain mean: (1 + 1 + 5 + 1) / 4.0 = 8/4 = 2.0 (calm-oriented 4th axis)
+        #expect(reply["compositeScore"] as? Double == 2.0)
     }
 
     @Test
@@ -191,12 +191,12 @@ struct WatchConnectivityServicePersistTests {
         let context = container.mainContext
 
         let reply = try service.persistCheckIn(
-            energy: 10, focus: 10, stress: 1, growth: 10,
+            energy: 5, focus: 5, stress: 1, growth: 5,
             context: context
         )
 
-        // (10 + 10 + (11-1) + 10) / 4.0 = 40/4 = 10.0
-        #expect(reply["compositeScore"] as? Double == 10.0)
+        // Plain mean: (5 + 5 + 1 + 5) / 4.0 = 16/4 = 4.0 (calm-oriented 4th axis)
+        #expect(reply["compositeScore"] as? Double == 4.0)
     }
 
     @Test

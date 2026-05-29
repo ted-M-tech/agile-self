@@ -16,7 +16,9 @@ struct CheckInConfirmationView: View {
     let growthScore: Int
     let elapsedSeconds: Int
     let previousComposite: Double?
-    var insight: String?
+    /// Bound so the overlay re-renders when the async daily-insight task completes
+    /// (starts nil, updated in place by the save path).
+    @Binding var insight: String?
     let onDismiss: () -> Void
 
     @State private var showCheckmark = false
@@ -25,8 +27,26 @@ struct CheckInConfirmationView: View {
     @State private var autoDismissTask: Task<Void, Never>?
 
     private var compositeScore: Double {
-        let invertedStress = 11 - stressScore
-        return Double(energyScore + focusScore + invertedStress + growthScore) / 4.0
+        // Plain average of all four dimensions (each 1-5, higher = better). The 4th axis
+        // (passed as stressScore) now carries Calm. Matches DailyCheckIn.compositeScore.
+        Double(energyScore + focusScore + stressScore + growthScore) / 4.0
+    }
+
+    /// Word headline mapped from the 1–5 composite (descending bands).
+    private var compositeWord: String {
+        switch compositeScore {
+        case 4.5...: return "Great day"
+        case 3.5...: return "Good day"
+        case 2.5...: return "Steady day"
+        case 1.5...: return "Tough day"
+        default: return "Hard day"
+        }
+    }
+
+    /// Face glyph for a single axis value (1…5).
+    private func face(for value: Int) -> String {
+        let faces = ["\u{1F623}", "\u{1F641}", "\u{1F610}", "\u{1F642}", "\u{1F604}"]
+        return faces[min(max(value, 1), 5) - 1]
     }
 
     private var delta: Double? {
@@ -83,7 +103,19 @@ struct CheckInConfirmationView: View {
         }
         .onAppear {
             startAnimations()
-            scheduleAutoDismiss()
+            // If the insight is already present (rare — generation is async), give the
+            // user a moment to read it; otherwise arm the hard cap until it arrives.
+            if insight != nil {
+                scheduleAutoDismiss(after: .seconds(4))
+            } else {
+                scheduleAutoDismiss(after: .seconds(8))
+            }
+        }
+        .onChange(of: insight) { _, newValue in
+            // The async insight just landed — reset the timer to a short linger so the
+            // user actually sees it (kept well under the hard cap and the UI-test budget).
+            guard newValue != nil else { return }
+            scheduleAutoDismiss(after: .seconds(4))
         }
         .onDisappear {
             autoDismissTask?.cancel()
@@ -135,10 +167,11 @@ struct CheckInConfirmationView: View {
 
     private var compositeScoreDisplay: some View {
         VStack(spacing: Theme.Spacing.xs) {
+            // Word-first headline mapped from the 1–5 composite.
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
-                Text(String(format: "%.1f", compositeScore))
-                    .font(Theme.Typography.scoreLarge)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text(compositeWord)
+                    .font(Theme.Typography.title1)
+                    .gradientText()
 
                 if let delta, abs(delta) >= 0.1 {
                     HStack(spacing: 2) {
@@ -151,9 +184,22 @@ struct CheckInConfirmationView: View {
                 }
             }
 
+            // Small numeric score under the headline (1.0–5.0).
+            Text(String(format: "%.1f / 5", compositeScore))
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            // Kept so the M2/Journey UI tests' `staticTexts["Composite Score"]` still resolves.
             Text("Composite Score")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textSecondary)
+
+            // Give the delta arrow a baseline so it actually means something.
+            if let delta, abs(delta) >= 0.1 {
+                Text(String(format: "%+.1f vs your last check-in", delta))
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
         }
     }
 
@@ -164,8 +210,11 @@ struct CheckInConfirmationView: View {
             ForEach(DimensionType.allCases) { dimension in
                 let value = scoreFor(dimension)
                 VStack(spacing: Theme.Spacing.xs) {
+                    Text(face(for: value))
+                        .font(.system(size: 18))
+
                     Image(systemName: dimension.icon)
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(Theme.Dimension.color(for: dimension))
 
                     Text("\(value)")
@@ -189,7 +238,7 @@ struct CheckInConfirmationView: View {
                 .font(.body)
                 .foregroundStyle(Theme.Colors.accentStart)
 
-            Text(insight ?? "Check-in saved successfully!")
+            Text(insight ?? "Logged. Showing up today is the whole game — one more day on your trend.")
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.leading)
@@ -260,9 +309,14 @@ struct CheckInConfirmationView: View {
         }
     }
 
-    private func scheduleAutoDismiss() {
+    /// (Re)arms the auto-dismiss timer. Replacing the task lets the insight-arrival path
+    /// reset the countdown so the generated text is on-screen long enough to read, while a
+    /// hard cap guarantees the overlay never hangs if generation fails. Tap-to-dismiss
+    /// remains available throughout.
+    private func scheduleAutoDismiss(after duration: Duration) {
+        autoDismissTask?.cancel()
         autoDismissTask = Task {
-            try? await Task.sleep(for: .seconds(5))
+            try? await Task.sleep(for: duration)
             guard !Task.isCancelled else { return }
             onDismiss()
         }
@@ -302,12 +356,13 @@ private struct CheckmarkShape: Shape {
 
 #Preview("Confirmation - With Delta") {
     CheckInConfirmationView(
-        energyScore: 8,
-        focusScore: 7,
-        stressScore: 3,
-        growthScore: 9,
+        energyScore: 4,
+        focusScore: 4,
+        stressScore: 2,
+        growthScore: 5,
         elapsedSeconds: 12,
-        previousComposite: 7.0,
+        previousComposite: 3.5,
+        insight: .constant("Strong day. You're moving in a good direction — keep the rhythm."),
         onDismiss: {}
     )
     .preferredColorScheme(.dark)
@@ -315,12 +370,13 @@ private struct CheckmarkShape: Shape {
 
 #Preview("Confirmation - No Previous") {
     CheckInConfirmationView(
-        energyScore: 6,
-        focusScore: 5,
-        stressScore: 6,
-        growthScore: 5,
+        energyScore: 3,
+        focusScore: 3,
+        stressScore: 3,
+        growthScore: 3,
         elapsedSeconds: 28,
         previousComposite: nil,
+        insight: .constant(nil),
         onDismiss: {}
     )
     .preferredColorScheme(.dark)

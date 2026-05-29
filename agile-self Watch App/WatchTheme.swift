@@ -65,11 +65,13 @@ enum WatchDimensionType: String, CaseIterable, Codable, Identifiable {
 
     var id: String { rawValue }
 
+    // The `.stress` case + rawValue "stress" are kept for protocol/data continuity, but the
+    // 4th axis is now Calm (high = calm/good). Mirrors the iOS DimensionType reframe.
     var label: String {
         switch self {
         case .energy: return "Energy"
         case .focus: return "Focus"
-        case .stress: return "Stress"
+        case .stress: return "Calm"
         case .growth: return "Growth"
         }
     }
@@ -78,7 +80,7 @@ enum WatchDimensionType: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .energy: return "bolt.fill"
         case .focus: return "eye.fill"
-        case .stress: return "waveform.path.ecg"
+        case .stress: return "wind"
         case .growth: return "leaf.fill"
         }
     }

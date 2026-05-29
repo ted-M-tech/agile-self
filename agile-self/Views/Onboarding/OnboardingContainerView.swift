@@ -2,11 +2,12 @@
 //  OnboardingContainerView.swift
 //  agile-self
 //
-//  4-screen onboarding flow: Welcome, How It Works, Permissions, First Check-in.
+//  5-screen onboarding flow: Welcome, Your Name, How It Works, Permissions, Ready.
 //
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 // MARK: - Onboarding Page
 
@@ -21,13 +22,23 @@ private enum OnboardingPage: Int, CaseIterable {
 // MARK: - OnboardingContainerView
 
 struct OnboardingContainerView: View {
-    let onComplete: () -> Void
+    /// Called when onboarding finishes. `openCheckIn == true` requests that the app
+    /// open the daily check-in once it lands on Home (deep-link from "Start First Check-in").
+    let onComplete: (_ openCheckIn: Bool) -> Void
 
     @Environment(\.modelContext) private var modelContext
     @Environment(AppContainer.self) private var appContainer
     @State private var currentPage: OnboardingPage = .welcome
     @State private var animateWelcome = false
     @State private var userName: String = ""
+
+    init(onComplete: @escaping (_ openCheckIn: Bool) -> Void) {
+        self.onComplete = onComplete
+        // Page-control dots are near-invisible on the near-black background by default;
+        // give them explicit Theme-tokened colors with adequate contrast.
+        UIPageControl.appearance().currentPageIndicatorTintColor = UIColor(Theme.Colors.accentStart)
+        UIPageControl.appearance().pageIndicatorTintColor = UIColor(Theme.Colors.textTertiary)
+    }
 
     var body: some View {
         ZStack {
@@ -55,7 +66,29 @@ struct OnboardingContainerView: View {
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
             }
         }
+        .overlay(alignment: .topLeading) { backButton }
         .preferredColorScheme(.dark)
+    }
+
+    /// Small Back chevron, hidden on the first page. Lets users correct a tap without
+    /// only relying on the swipe gesture.
+    @ViewBuilder
+    private var backButton: some View {
+        if currentPage != .welcome {
+            Button {
+                nameFieldFocused = false
+                withAnimation(Theme.Animation.smooth) {
+                    currentPage = OnboardingPage(rawValue: currentPage.rawValue - 1) ?? .welcome
+                }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .padding(Theme.Spacing.md)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back")
+        }
     }
 
     // MARK: - Screen 1: Welcome
@@ -67,7 +100,7 @@ struct OnboardingContainerView: View {
             // Logo area with 4-color particles
             ZStack {
                 // Particle accents
-                ForEach(Array(DimensionType.allCases.enumerated()), id: \.element) { index, dimension in
+                ForEach(Array(DimensionType.allCases.enumerated()), id: \.offset) { index, dimension in
                     Circle()
                         .fill(Theme.Dimension.color(for: dimension))
                         .frame(width: 12, height: 12)
@@ -149,6 +182,8 @@ struct OnboardingContainerView: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.words)
                 .focused($nameFieldFocused)
+                .submitLabel(.continue)
+                .onSubmit { advanceFromName() }
                 .padding(.vertical, Theme.Spacing.md)
                 .padding(.horizontal, Theme.Spacing.lg)
                 .background(Theme.Colors.backgroundSecondary)
@@ -160,10 +195,7 @@ struct OnboardingContainerView: View {
             Spacer()
 
             Button {
-                saveUserName()
-                withAnimation(Theme.Animation.smooth) {
-                    currentPage = .howItWorks
-                }
+                advanceFromName()
             } label: {
                 Text("Continue")
                     .primaryButtonStyle()
@@ -172,6 +204,16 @@ struct OnboardingContainerView: View {
             .padding(.horizontal, Theme.Spacing.lg)
             .padding(.bottom, Theme.Spacing.xxl)
             .accessibilityHint("Save your name and continue")
+        }
+    }
+
+    /// Dismisses the keyboard, saves the entered name, and advances to How It Works.
+    /// Shared by the Continue button and the keyboard return key.
+    private func advanceFromName() {
+        nameFieldFocused = false
+        saveUserName()
+        withAnimation(Theme.Animation.smooth) {
+            currentPage = .howItWorks
         }
     }
 
@@ -210,14 +252,12 @@ struct OnboardingContainerView: View {
         try? modelContext.save()
     }
 
-    /// Marks onboarding complete in the persisted profile, then advances the app.
-    private func completeOnboarding() {
-        let descriptor = FetchDescriptor<UserProfile>()
-        if let profile = try? modelContext.fetch(descriptor).first {
-            profile.hasCompletedOnboarding = true
-            try? modelContext.save()
-        }
-        onComplete()
+    /// Finishes onboarding by handing control back to RootView. RootView is the SINGLE
+    /// writer of the completion flag (the @AppStorage gate AND the persisted profile flag,
+    /// written together so they can never diverge). `openCheckIn` deep-links into the
+    /// daily check-in once Home appears.
+    private func completeOnboarding(openCheckIn: Bool) {
+        onComplete(openCheckIn)
     }
 
     // MARK: - Screen 3: How It Works
@@ -236,7 +276,7 @@ struct OnboardingContainerView: View {
                     icon: "sun.max.fill",
                     title: "Daily",
                     subtitle: "15 seconds",
-                    description: "Score your energy, focus, stress, and growth each day.",
+                    description: "Score your energy, focus, calm, and growth each day.",
                     accentColor: Theme.Dimension.energy
                 )
 
@@ -322,7 +362,7 @@ struct OnboardingContainerView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - Screen 3: Permissions
+    // MARK: - Screen 4: Permissions
 
     private var permissionsScreen: some View {
         VStack(spacing: Theme.Spacing.lg) {
@@ -338,9 +378,11 @@ struct OnboardingContainerView: View {
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .accessibilityAddTraits(.isHeader)
 
-                Text("Connect your data for deeper insights")
+                Text("Connect your data for deeper insights. Turning a switch on will ask the system for permission when you continue.")
                     .font(Theme.Typography.callout)
                     .foregroundStyle(Theme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             VStack(spacing: 0) {
@@ -348,7 +390,8 @@ struct OnboardingContainerView: View {
                     icon: "heart.fill",
                     title: "Apple Health",
                     description: "Sleep, steps, heart rate, exercise",
-                    iconColor: .red
+                    iconColor: .red,
+                    isOn: $healthEnabled
                 )
 
                 Divider().overlay(Theme.Colors.divider)
@@ -357,16 +400,20 @@ struct OnboardingContainerView: View {
                     icon: "bell.fill",
                     title: "Notifications",
                     description: "Daily reminders and insights",
-                    iconColor: Theme.Colors.warning
+                    iconColor: Theme.Colors.warning,
+                    isOn: $notificationsEnabled
                 )
             }
             .background(Theme.Colors.backgroundSecondary)
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
             .padding(.horizontal, Theme.Spacing.lg)
 
-            Text("You can change these later in Settings")
+            Text("Each switch triggers a system prompt. You can change these later in Settings.")
                 .font(Theme.Typography.footnote)
                 .foregroundStyle(Theme.Colors.textTertiary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, Theme.Spacing.lg)
 
             Spacer()
 
@@ -382,7 +429,10 @@ struct OnboardingContainerView: View {
             } label: {
                 Group {
                     if isRequestingPermissions {
-                        ProgressView().tint(.white)
+                        HStack(spacing: Theme.Spacing.sm) {
+                            ProgressView().tint(.white)
+                            Text("Requesting…")
+                        }
                     } else {
                         Text("Continue")
                     }
@@ -397,7 +447,9 @@ struct OnboardingContainerView: View {
         }
     }
 
-    @State private var healthEnabled = false
+    // Apple Health is the page's headline value-add, so it defaults ON. Notifications also
+    // default ON. Each row binds to its own explicit @State (no fragile title-string switch).
+    @State private var healthEnabled = true
     @State private var notificationsEnabled = true
     @State private var isRequestingPermissions = false
 
@@ -405,16 +457,10 @@ struct OnboardingContainerView: View {
         icon: String,
         title: String,
         description: String,
-        iconColor: Color
+        iconColor: Color,
+        isOn: Binding<Bool>
     ) -> some View {
-        let binding: Binding<Bool> = {
-            switch title {
-            case "Apple Health": return $healthEnabled
-            default: return $notificationsEnabled
-            }
-        }()
-
-        return HStack(spacing: Theme.Spacing.md) {
+        HStack(spacing: Theme.Spacing.md) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(iconColor)
@@ -432,7 +478,7 @@ struct OnboardingContainerView: View {
 
             Spacer()
 
-            Toggle("", isOn: binding)
+            Toggle("", isOn: isOn)
                 .labelsHidden()
                 .tint(Theme.Colors.accentStart)
         }
@@ -442,9 +488,16 @@ struct OnboardingContainerView: View {
         .accessibilityLabel("\(title). \(description)")
     }
 
-    // MARK: - Screen 4: First Check-in
+    // MARK: - Screen 5: Ready
 
     @State private var sparklePhase = false
+
+    /// 4 dimension colors (same source the Welcome screen uses) + the two accent tones,
+    /// so the Ready sparkles match the rest of onboarding instead of a stale Stress token.
+    private var sparklePalette: [Color] {
+        DimensionType.allCases.map { Theme.Dimension.color(for: $0) }
+            + [Theme.Colors.accentStart, Theme.Colors.accentEnd]
+    }
 
     private var firstCheckInScreen: some View {
         VStack(spacing: Theme.Spacing.lg) {
@@ -452,14 +505,11 @@ struct OnboardingContainerView: View {
 
             // Sparkle animation area
             ZStack {
+                let palette = sparklePalette
                 ForEach(0..<6, id: \.self) { i in
                     Image(systemName: "sparkle")
                         .font(.system(size: CGFloat.random(in: 16...28)))
-                        .foregroundStyle(
-                            [Theme.Dimension.energy, Theme.Dimension.focus,
-                             Theme.Dimension.stress, Theme.Dimension.growth,
-                             Theme.Colors.accentStart, Theme.Colors.accentEnd][i]
-                        )
+                        .foregroundStyle(palette[i % palette.count])
                         .offset(sparkleOffset(index: i))
                         .opacity(sparklePhase ? 1.0 : 0.3)
                         .scaleEffect(sparklePhase ? 1.0 : 0.6)
@@ -492,7 +542,7 @@ struct OnboardingContainerView: View {
 
             VStack(spacing: Theme.Spacing.md) {
                 Button {
-                    completeOnboarding()
+                    completeOnboarding(openCheckIn: true)
                 } label: {
                     HStack(spacing: Theme.Spacing.sm) {
                         Image(systemName: "pencil.line")
@@ -504,7 +554,7 @@ struct OnboardingContainerView: View {
                 .accessibilityHint("Opens the daily check-in form")
 
                 Button {
-                    completeOnboarding()
+                    completeOnboarding(openCheckIn: false)
                 } label: {
                     Text("Skip for now")
                         .ghostButtonStyle()
@@ -543,7 +593,7 @@ struct OnboardingContainerView: View {
 // MARK: - Preview
 
 #Preview {
-    OnboardingContainerView(onComplete: {})
+    OnboardingContainerView(onComplete: { _ in })
         .modelContainer(MockData.previewContainer)
         .environment(AppContainer(modelContainer: MockData.previewContainer))
         .preferredColorScheme(.dark)

@@ -114,12 +114,15 @@ struct CorrelationCard: View {
                 )
             )
 
+            // Calm is high = good, so more screen time lowering calm is a NEGATIVE
+            // coefficient → the card renders it in the "bad" warning color with a
+            // down arrow. Verifies the sign-driven direction reads correctly.
             CorrelationCard(
                 correlation: Correlation(
                     factor1: "Screen Time",
-                    factor2: "Stress",
-                    coefficient: 0.54,
-                    description: "Screen Time\u{2191} = Stress\u{2191}"
+                    factor2: "Calm",
+                    coefficient: -0.54,
+                    description: "Screen Time\u{2191} = Calm\u{2193}"
                 )
             )
         }

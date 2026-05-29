@@ -363,17 +363,11 @@ struct ProfileView: View {
             sectionHeader(title: "PREFERENCES")
 
             VStack(spacing: 0) {
-                settingsRow(icon: "heart.fill", label: "Health Data", iconColor: .red) { showSettings = true }
-                settingsDivider
-                settingsRow(icon: "iphone", label: "Screen Time", iconColor: .cyan) { showSettings = true }
-                settingsDivider
-                settingsRow(icon: "bell.fill", label: "Notifications", iconColor: Theme.Colors.warning) { showSettings = true }
+                // One entry point to the full Settings screen (health, notifications,
+                // export, about, privacy all live there). Subscription opens the paywall.
+                settingsRow(icon: "gearshape.fill", label: "Settings", iconColor: Theme.Colors.textSecondary) { showSettings = true }
                 settingsDivider
                 settingsRow(icon: "crown.fill", label: "Subscription", iconColor: Theme.Dimension.energy) { showPaywall = true }
-                settingsDivider
-                settingsRow(icon: "square.and.arrow.up", label: "Export Data", iconColor: Theme.Colors.success) { showSettings = true }
-                settingsDivider
-                settingsRow(icon: "info.circle", label: "About", iconColor: Theme.Colors.textSecondary) { showSettings = true }
             }
             .background(Theme.Colors.backgroundSecondary)
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))

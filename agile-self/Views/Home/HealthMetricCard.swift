@@ -23,13 +23,16 @@ struct HealthMetricCard: View {
                 .font(Theme.Typography.scoreSmall)
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.6)
 
             Text(label)
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.textTertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
-        .frame(width: 80)
+        .frame(width: 96)
+        .padding(.horizontal, Theme.Spacing.xs)
         .padding(.vertical, Theme.Spacing.md)
         .background(Theme.Colors.backgroundSecondary)
         .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))

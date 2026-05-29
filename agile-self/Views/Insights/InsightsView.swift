@@ -56,7 +56,7 @@ struct InsightsView: View {
 
     // MARK: - UI State
 
-    @State private var selectedPeriod: TimePeriod = .month
+    @State private var selectedPeriod: TimePeriod = .week
     @State private var activeDimensions: Set<DimensionType> = []
     @State private var animateChart = false
 
@@ -78,7 +78,7 @@ struct InsightsView: View {
                     } else {
                         periodPicker
                         scoreTrendSection
-                        correlationsSection
+                        connectionsSection
                         patternsSection
                         streakSection
                         reviewActionsSection
@@ -103,6 +103,7 @@ struct InsightsView: View {
                 )
                 viewModel.loadData(context: modelContext)
                 await viewModel.loadPatterns()
+                await viewModel.loadConnections()
             }
             .onChange(of: selectedPeriod) { _, newValue in
                 viewModel.selectedPeriod = newValue
@@ -196,14 +197,21 @@ struct InsightsView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(title: "SCORE TREND", icon: "chart.xyaxis.line")
 
-            // Main chart
-            scoreChart
+            // Main chart (or a hint when there is nothing to plot yet)
+            if filteredCheckIns.count <= 1 {
+                singlePointChart
+            } else {
+                scoreChart
+            }
 
             // Dimension toggles
             dimensionLegend
         }
         .cardStyle()
     }
+
+    /// Dates actually being plotted, for pinning the x-domain / stride.
+    private var chartDates: [Date] { filteredCheckIns.map(\.date) }
 
     private var scoreChart: some View {
         Chart {
@@ -235,6 +243,14 @@ struct InsightsView: View {
                     .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
                     .interpolationMethod(.catmullRom)
 
+                    // Always-visible composite point so sparse data is legible.
+                    PointMark(
+                        x: .value("Day", checkIn.date, unit: .day),
+                        y: .value("Score", checkIn.compositeScore)
+                    )
+                    .foregroundStyle(Theme.Colors.accentStart)
+                    .symbolSize(18)
+
                     // Optional dimension overlays
                     ForEach(Array(activeDimensions), id: \.self) { dimension in
                         LineMark(
@@ -249,8 +265,9 @@ struct InsightsView: View {
                 }
             }
         }
+        .chartXScale(domain: ChartAxis.dateDomain(for: chartDates))
         .chartXAxis {
-            AxisMarks(values: .automatic) { value in
+            AxisMarks(values: .stride(by: .day, count: ChartAxis.dayStride(for: chartDates, desiredCount: 6))) { value in
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
                         Text(date.formatted(xAxisFormat))
@@ -261,7 +278,7 @@ struct InsightsView: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading, values: [2, 4, 6, 8, 10]) { value in
+            AxisMarks(position: .leading, values: [1, 2, 3, 4, 5]) { value in
                 AxisValueLabel {
                     if let intValue = value.as(Int.self) {
                         Text("\(intValue)")
@@ -273,8 +290,56 @@ struct InsightsView: View {
                     .foregroundStyle(Theme.Colors.divider)
             }
         }
-        .chartYScale(domain: 1...10)
+        .chartYScale(domain: 1...5)
         .frame(height: 200)
+    }
+
+    /// 0–1 points: a line/area is invisible. Show the single point (if any) on a
+    /// pinned axis with a hint, instead of a broken-looking empty chart.
+    private var singlePointChart: some View {
+        VStack(spacing: Theme.Spacing.sm) {
+            Chart {
+                ForEach(filteredCheckIns, id: \.id) { checkIn in
+                    PointMark(
+                        x: .value("Day", checkIn.date, unit: .day),
+                        y: .value("Score", checkIn.compositeScore)
+                    )
+                    .foregroundStyle(Theme.Colors.accentStart)
+                    .symbolSize(60)
+                }
+            }
+            .chartXScale(domain: ChartAxis.dateDomain(for: chartDates))
+            .chartXAxis {
+                AxisMarks(values: chartDates) { value in
+                    AxisValueLabel {
+                        if let date = value.as(Date.self) {
+                            Text(date.formatted(xAxisFormat))
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading, values: [1, 2, 3, 4, 5]) { value in
+                    AxisValueLabel {
+                        if let intValue = value.as(Int.self) {
+                            Text("\(intValue)")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.textTertiary)
+                        }
+                    }
+                    AxisGridLine()
+                        .foregroundStyle(Theme.Colors.divider)
+                }
+            }
+            .chartYScale(domain: 1...5)
+            .frame(height: 200)
+
+            Text("Keep checking in to see your trend")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
     }
 
     /// Date format adapts to the selected period.
@@ -340,20 +405,30 @@ struct InsightsView: View {
         .accessibilityValue(isActive ? "visible" : "hidden")
     }
 
-    // MARK: - Correlations Section
+    // MARK: - Connections Section
 
-    private var correlationsSection: some View {
+    /// AI-narrated, honest "Connections" between health metrics and how the user feels —
+    /// replaces the over-promising bare-coefficient correlation list.
+    private var connectionsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            sectionHeader(title: "HEALTH CORRELATIONS", icon: "arrow.triangle.branch")
+            sectionHeader(title: "CONNECTIONS", icon: "wand.and.stars")
 
-            if viewModel.correlations.isEmpty {
-                Text("Correlations will appear once enough data is collected.")
+            if viewModel.connections.isEmpty {
+                // Honest waiting state — correlation needs ~a week of matched check-in + Health data.
+                Text("Keep checking in with Apple Health connected — after about a week I'll start showing how your sleep, steps, and activity line up with how you feel.")
                     .font(Theme.Typography.callout)
                     .foregroundStyle(Theme.Colors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineSpacing(3)
                     .padding(.vertical, Theme.Spacing.md)
             } else {
-                ForEach(viewModel.correlations) { correlation in
-                    CorrelationCard(correlation: correlation)
+                // The narrator builds connections from `correlations.prefix(3)` in order, so the
+                // i-th sentence aligns with the i-th correlation for the supporting arrow.
+                ForEach(Array(viewModel.connections.enumerated()), id: \.offset) { index, sentence in
+                    ConnectionCard(
+                        sentence: sentence,
+                        correlation: index < viewModel.correlations.count ? viewModel.correlations[index] : nil
+                    )
                 }
             }
         }

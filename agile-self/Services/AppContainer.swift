@@ -34,6 +34,18 @@ final class AppContainer {
         return service
     }
 
+    private var _onDeviceAIService: OnDeviceAIService?
+    /// Shared on-device service instance. Owns NaturalLanguage-backed helpers
+    /// (e.g. `analyzeSentiment`) that are not part of `AIServiceProtocol`, and is
+    /// also the on-device backend the router routes to. Kept as a single instance
+    /// so callers never construct a fresh `OnDeviceAIService()` inline.
+    private var onDeviceAIService: OnDeviceAIService {
+        if let existing = _onDeviceAIService { return existing }
+        let service = OnDeviceAIService()
+        _onDeviceAIService = service
+        return service
+    }
+
     private var _aiService: (any AIServiceProtocol)?
     /// The unified AI service. Backed by `AIServiceRouter`, which composes the
     /// on-device service (instant, local) and the Gemini cloud service, routing
@@ -41,12 +53,19 @@ final class AppContainer {
     var aiService: any AIServiceProtocol {
         if let existing = _aiService { return existing }
         let router = AIServiceRouter(
-            onDeviceService: OnDeviceAIService(),
+            onDeviceService: onDeviceAIService,
             geminiService: GeminiAIService(),
             foundationModelsService: FoundationModelsAIService()
         )
         _aiService = router
         return router
+    }
+
+    /// Analyzes the sentiment of free text (-1.0…1.0) via the shared on-device
+    /// service. Exposed here so the check-in save path routes through DI instead of
+    /// constructing a throwaway `OnDeviceAIService()`.
+    func analyzeSentiment(_ text: String) -> Double {
+        onDeviceAIService.analyzeSentiment(text)
     }
 
     /// Refreshes the router's cloud-AI preference from the persisted UserProfile.

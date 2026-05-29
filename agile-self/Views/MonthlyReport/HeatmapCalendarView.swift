@@ -122,8 +122,8 @@ struct HeatmapCalendarView: View {
         guard let score else {
             return Theme.Colors.backgroundTertiary
         }
-        // Map score 1-10 to opacity 0.15-1.0
-        let normalizedScore = (score - 1.0) / 9.0
+        // Map score 1-5 to opacity 0.15-1.0
+        let normalizedScore = (score - 1.0) / 4.0
         let clampedScore = max(0, min(normalizedScore, 1.0))
 
         // Blend from dim accent to full accent

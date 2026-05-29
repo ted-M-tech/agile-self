@@ -14,6 +14,7 @@
 //
 
 import Foundation
+import os
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -38,6 +39,7 @@ final class FoundationModelsAIService: AIServiceProtocol, @unchecked Sendable {
         #else
         self.isModelAvailable = false
         #endif
+        AppLog.ai.notice("FoundationModels availability=\(self.isModelAvailable ? "available" : "unavailable", privacy: .public) (sim/ineligible/AI-off → unavailable → heuristic fallback)")
     }
 
     // MARK: - Plain-text generation helper
@@ -65,10 +67,12 @@ final class FoundationModelsAIService: AIServiceProtocol, @unchecked Sendable {
 
     nonisolated func generateDailyInsight(checkIn: DailyCheckIn) async throws -> String {
         let instructions = "You are a concise, supportive self-growth coach. Reply with at most 2 short sentences, warm and specific. No lists, no markdown, no emojis."
-        let prompt = "Energy=\(checkIn.energyScore) Focus=\(checkIn.focusScore) Stress=\(checkIn.stressScore) Growth=\(checkIn.growthScore) Composite=\(String(format: "%.1f", checkIn.compositeScore)). Note: \(checkIn.note ?? "(none)")"
+        let prompt = "Energy=\(checkIn.energyScore) Focus=\(checkIn.focusScore) Calm=\(checkIn.calmScore) Growth=\(checkIn.growthScore) Composite=\(String(format: "%.1f", checkIn.compositeScore)) (all 1-5, higher is better; Calm 5 = very calm). Note: \(checkIn.note ?? "(none)")"
         if let text = await generateText(instructions: instructions, prompt: prompt) {
+            AppLog.ai.notice("dailyInsight backend=foundationModels")
             return text
         }
+        AppLog.ai.notice("dailyInsight backend=heuristic")
         return try await fallback.generateDailyInsight(checkIn: checkIn)
     }
 
@@ -90,12 +94,16 @@ final class FoundationModelsAIService: AIServiceProtocol, @unchecked Sendable {
                 let questions = response.content.questions
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
-                if !questions.isEmpty { return Array(questions.prefix(6)) }
+                if !questions.isEmpty {
+                    AppLog.ai.notice("weeklyQuestions backend=foundationModels count=\(questions.count, privacy: .public)")
+                    return Array(questions.prefix(6))
+                }
             } catch {
                 // fall through to heuristic
             }
         }
         #endif
+        AppLog.ai.notice("weeklyQuestions backend=heuristic")
         return try await fallback.generateWeeklyQuestions(checkIns: checkIns, health: health)
     }
 
@@ -114,12 +122,14 @@ final class FoundationModelsAIService: AIServiceProtocol, @unchecked Sendable {
                     to: Self.weeklySummaryPrompt(conversation: conversation, checkIns: checkIns),
                     generating: GenerableWeeklySummary.self
                 )
+                AppLog.ai.notice("weeklySummary backend=foundationModels")
                 return response.content.toResult()
             } catch {
                 // fall through to heuristic
             }
         }
         #endif
+        AppLog.ai.notice("weeklySummary backend=heuristic")
         return try await fallback.generateWeeklySummary(conversation: conversation, checkIns: checkIns)
     }
 
@@ -130,7 +140,7 @@ final class FoundationModelsAIService: AIServiceProtocol, @unchecked Sendable {
         // Deterministic number + real correlations, identical on every path.
         let correlations = AnalyticsService().detectCorrelations(checkIns: checkIns, health: health)
         let avgComposite = checkIns.isEmpty
-            ? 5.0
+            ? 3.0
             : checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
 
         guard isModelAvailable else {
@@ -144,12 +154,14 @@ final class FoundationModelsAIService: AIServiceProtocol, @unchecked Sendable {
                     to: Self.monthlyReportPrompt(checkIns: checkIns, avgComposite: avgComposite, correlations: correlations),
                     generating: GenerableMonthlyReport.self
                 )
+                AppLog.ai.notice("monthlyReport backend=foundationModels overallScore=\(avgComposite, privacy: .public) correlations=\(correlations.count, privacy: .public) (numbers deterministic, prose only from LLM)")
                 return response.content.toResult(overallScore: avgComposite, correlations: correlations)
             } catch {
                 // fall through to heuristic
             }
         }
         #endif
+        AppLog.ai.notice("monthlyReport backend=heuristic overallScore=\(avgComposite, privacy: .public) correlations=\(correlations.count, privacy: .public)")
         return try await fallback.generateMonthlyReport(checkIns: checkIns, health: health)
     }
 
@@ -172,13 +184,79 @@ final class FoundationModelsAIService: AIServiceProtocol, @unchecked Sendable {
                 let patterns = response.content.patterns
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
-                if !patterns.isEmpty { return Array(patterns.prefix(3)) }
+                if !patterns.isEmpty {
+                    AppLog.ai.notice("patterns backend=foundationModels count=\(patterns.count, privacy: .public)")
+                    return Array(patterns.prefix(3))
+                }
             } catch {
                 // fall through to heuristic
             }
         }
         #endif
+        AppLog.ai.notice("patterns backend=heuristic checkIns=\(checkIns.count, privacy: .public)")
         return try await fallback.generatePatterns(from: checkIns)
+    }
+
+    // MARK: - Connections (mood ↔ health)
+
+    /// The deterministic connection statements are computed first and used as the source of
+    /// truth (they carry the real numbers). The LLM may only soften the prose, one statement at
+    /// a time, with a guaranteed fallback to the heuristic sentence on any failure/empty output
+    /// or if it tries to introduce a digit not already present.
+    nonisolated func generateConnections(
+        checkIns: [DailyCheckIn],
+        health: [HealthSnapshot]
+    ) async throws -> [String] {
+        let base = ConnectionNarrator.connections(checkIns: checkIns, health: health)
+        guard !base.isEmpty, isModelAvailable else {
+            AppLog.ai.notice("connections backend=heuristic count=\(base.count, privacy: .public)")
+            return base
+        }
+        let instructions = "You rephrase one factual sentence about a correlation between a health metric and a mood, keeping it warm, honest, and under 22 words. Use correlational language only (\"tends to\", \"lines up with\") — never \"caused\" or \"because\". Do NOT change, add, or remove any number. No markdown, no emojis."
+        var refined: [String] = []
+        for sentence in base {
+            if let text = await generateText(instructions: instructions, prompt: sentence),
+               Self.preservesNumbers(of: sentence, in: text) {
+                refined.append(text)
+            } else {
+                refined.append(sentence)
+            }
+        }
+        AppLog.ai.notice("connections backend=foundationModels count=\(refined.count, privacy: .public) (numbers deterministic, prose only from LLM)")
+        return refined
+    }
+
+    nonisolated func generateTodayConnection(
+        checkIn: DailyCheckIn,
+        todayHealth: HealthSnapshot?,
+        correlations: [Correlation]
+    ) async throws -> String? {
+        let base = ConnectionNarrator.todayConnection(
+            checkIn: checkIn,
+            todayHealth: todayHealth,
+            correlations: correlations
+        )
+        guard let base, isModelAvailable else {
+            AppLog.ai.notice("todayConnection backend=heuristic present=\(base != nil ? "yes" : "no", privacy: .public)")
+            return base
+        }
+        let instructions = "You rephrase one factual sentence linking today's health metric to today's mood, keeping it warm, honest, and under 28 words. Use correlational language only (\"tends to\", \"lines up with\") — never \"caused\" or \"because\". Do NOT change, add, or remove any number. No markdown, no emojis."
+        if let text = await generateText(instructions: instructions, prompt: base),
+           Self.preservesNumbers(of: base, in: text) {
+            AppLog.ai.notice("todayConnection backend=foundationModels (numbers deterministic, prose only from LLM)")
+            return text
+        }
+        AppLog.ai.notice("todayConnection backend=heuristic")
+        return base
+    }
+
+    /// Guards the no-hallucinated-numbers contract: the LLM output must not introduce any digit
+    /// sequence that wasn't in the deterministic source sentence.
+    private static func preservesNumbers(of source: String, in candidate: String) -> Bool {
+        func numbers(_ s: String) -> Set<String> {
+            Set(s.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty })
+        }
+        return numbers(candidate).isSubset(of: numbers(source))
     }
 
     // MARK: - Prompt Builders (anonymized aggregates)
@@ -194,10 +272,10 @@ final class FoundationModelsAIService: AIServiceProtocol, @unchecked Sendable {
         }
         let avgComposite = checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
         var lines = [
-            "Weekly check-in aggregates (1-10 scales; stress is inverted in composite):",
+            "Weekly check-in aggregates (1-5 scales, higher is better; composite is a plain average; Calm 5 = very calm):",
             "Days logged: \(checkIns.count)",
             String(format: "Avg composite: %.1f", avgComposite),
-            String(format: "Avg energy: %.1f, focus: %.1f, stress: %.1f, growth: %.1f",
+            String(format: "Avg energy: %.1f, focus: %.1f, calm: %.1f, growth: %.1f",
                    average(checkIns.map(\.energyScore)), average(checkIns.map(\.focusScore)),
                    average(checkIns.map(\.stressScore)), average(checkIns.map(\.growthScore))),
         ]
@@ -210,7 +288,7 @@ final class FoundationModelsAIService: AIServiceProtocol, @unchecked Sendable {
     }
 
     private static func weeklySummaryPrompt(conversation: [ConversationMessage], checkIns: [DailyCheckIn]) -> String {
-        let avgComposite = checkIns.isEmpty ? 5.0 : checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
+        let avgComposite = checkIns.isEmpty ? 3.0 : checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
         let best = checkIns.max(by: { $0.compositeScore < $1.compositeScore })?.compositeScore
         let worst = checkIns.min(by: { $0.compositeScore < $1.compositeScore })?.compositeScore
         var lines = [
@@ -256,8 +334,8 @@ final class FoundationModelsAIService: AIServiceProtocol, @unchecked Sendable {
 
     private static func patternsPrompt(checkIns: [DailyCheckIn]) -> String {
         let lines = [
-            "Identify up to 3 behavioral patterns from \(checkIns.count) daily check-ins (1-10 scales).",
-            String(format: "Avg energy: %.1f, focus: %.1f, stress: %.1f, growth: %.1f",
+            "Identify up to 3 behavioral patterns from \(checkIns.count) daily check-ins (1-5 scales, higher is better; Calm 5 = very calm).",
+            String(format: "Avg energy: %.1f, focus: %.1f, calm: %.1f, growth: %.1f",
                    average(checkIns.map(\.energyScore)), average(checkIns.map(\.focusScore)),
                    average(checkIns.map(\.stressScore)), average(checkIns.map(\.growthScore))),
             "Each pattern: one concise, human-readable observation.",

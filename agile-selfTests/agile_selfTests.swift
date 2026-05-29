@@ -19,10 +19,11 @@ struct DailyCheckInTests {
     func initializationWithDefaults() {
         let checkIn = DailyCheckIn()
 
-        #expect(checkIn.energyScore == 5)
-        #expect(checkIn.focusScore == 5)
-        #expect(checkIn.stressScore == 5)
-        #expect(checkIn.growthScore == 5)
+        // Neutral default is 3 on the 1–5 scale.
+        #expect(checkIn.energyScore == 3)
+        #expect(checkIn.focusScore == 3)
+        #expect(checkIn.stressScore == 3)
+        #expect(checkIn.growthScore == 3)
         #expect(checkIn.note == nil)
         #expect(checkIn.sentimentScore == nil)
         #expect(checkIn.dailyInsight == nil)
@@ -37,10 +38,10 @@ struct DailyCheckInTests {
         let checkIn = DailyCheckIn(
             id: id,
             date: date,
-            energyScore: 8,
-            focusScore: 9,
-            stressScore: 3,
-            growthScore: 7,
+            energyScore: 4,
+            focusScore: 5,
+            stressScore: 2,
+            growthScore: 4,
             note: "Great day",
             sentimentScore: 0.85,
             dailyInsight: "You had a productive day",
@@ -49,10 +50,10 @@ struct DailyCheckInTests {
 
         #expect(checkIn.id == id)
         #expect(checkIn.date == date)
-        #expect(checkIn.energyScore == 8)
-        #expect(checkIn.focusScore == 9)
-        #expect(checkIn.stressScore == 3)
-        #expect(checkIn.growthScore == 7)
+        #expect(checkIn.energyScore == 4)
+        #expect(checkIn.focusScore == 5)
+        #expect(checkIn.stressScore == 2)
+        #expect(checkIn.growthScore == 4)
         #expect(checkIn.note == "Great day")
         #expect(checkIn.sentimentScore == 0.85)
         #expect(checkIn.dailyInsight == "You had a productive day")
@@ -72,22 +73,26 @@ struct DailyCheckInTests {
     @Test
     func compositeScoreWithDefaultValues() {
         let checkIn = DailyCheckIn()
-        // All scores = 5, invertedStress = 11 - 5 = 6
-        // (5 + 5 + 6 + 5) / 4.0 = 21 / 4.0 = 5.25
-        #expect(checkIn.compositeScore == 5.25)
+        // Plain mean of all four 3s: (3 + 3 + 3 + 3) / 4.0 = 3.0
+        #expect(checkIn.compositeScore == 3.0)
+    }
+
+    @Test
+    func defaultCheckInCompositeIsExactlyThree() {
+        // A neutral default check-in must score exactly 3.0 on the 1–5 scale.
+        #expect(DailyCheckIn().compositeScore == 3.0)
     }
 
     @Test
     func compositeScoreWithMaxValues() {
         let checkIn = DailyCheckIn(
-            energyScore: 10,
-            focusScore: 10,
-            stressScore: 1,  // Low stress is good
-            growthScore: 10
+            energyScore: 5,
+            focusScore: 5,
+            stressScore: 5,  // High calm is good
+            growthScore: 5
         )
-        // invertedStress = 11 - 1 = 10
-        // (10 + 10 + 10 + 10) / 4.0 = 10.0
-        #expect(checkIn.compositeScore == 10.0)
+        // (5 + 5 + 5 + 5) / 4.0 = 5.0
+        #expect(checkIn.compositeScore == 5.0)
     }
 
     @Test
@@ -95,43 +100,41 @@ struct DailyCheckInTests {
         let checkIn = DailyCheckIn(
             energyScore: 1,
             focusScore: 1,
-            stressScore: 10,  // High stress is bad
+            stressScore: 1,  // Low calm is bad
             growthScore: 1
         )
-        // invertedStress = 11 - 10 = 1
         // (1 + 1 + 1 + 1) / 4.0 = 1.0
         #expect(checkIn.compositeScore == 1.0)
     }
 
     @Test
-    func compositeScoreInvertsStress() {
-        // Two check-ins identical except for stress
-        let lowStress = DailyCheckIn(energyScore: 5, focusScore: 5, stressScore: 2, growthScore: 5)
-        let highStress = DailyCheckIn(energyScore: 5, focusScore: 5, stressScore: 9, growthScore: 5)
+    func compositeScoreRisesWithCalm() {
+        // Two check-ins identical except for the calm axis (stored as stressScore).
+        let lowCalm = DailyCheckIn(energyScore: 3, focusScore: 3, stressScore: 1, growthScore: 3)
+        let highCalm = DailyCheckIn(energyScore: 3, focusScore: 3, stressScore: 5, growthScore: 3)
 
-        // Low stress should yield a higher composite score
-        #expect(lowStress.compositeScore > highStress.compositeScore)
+        // Higher calm should yield a higher composite score (up = better for all axes).
+        #expect(highCalm.compositeScore > lowCalm.compositeScore)
     }
 
     @Test
     func compositeScoreWithMixedValues() {
         let checkIn = DailyCheckIn(
-            energyScore: 8,
-            focusScore: 6,
-            stressScore: 3,
-            growthScore: 7
+            energyScore: 4,
+            focusScore: 3,
+            stressScore: 2,
+            growthScore: 3
         )
-        // invertedStress = 11 - 3 = 8
-        // (8 + 6 + 8 + 7) / 4.0 = 29 / 4.0 = 7.25
-        #expect(checkIn.compositeScore == 7.25)
+        // (4 + 3 + 2 + 3) / 4.0 = 12 / 4.0 = 3.0
+        #expect(checkIn.compositeScore == 3.0)
     }
 
     // MARK: - score(for:) Tests
 
     @Test
     func scoreForEnergy() {
-        let checkIn = DailyCheckIn(energyScore: 8)
-        #expect(checkIn.score(for: .energy) == 8)
+        let checkIn = DailyCheckIn(energyScore: 4)
+        #expect(checkIn.score(for: .energy) == 4)
     }
 
     @Test
@@ -142,31 +145,31 @@ struct DailyCheckInTests {
 
     @Test
     func scoreForStress() {
-        let checkIn = DailyCheckIn(stressScore: 7)
-        #expect(checkIn.score(for: .stress) == 7)
+        let checkIn = DailyCheckIn(stressScore: 4)
+        #expect(checkIn.score(for: .stress) == 4)
     }
 
     @Test
     func scoreForGrowth() {
-        let checkIn = DailyCheckIn(growthScore: 10)
-        #expect(checkIn.score(for: .growth) == 10)
+        let checkIn = DailyCheckIn(growthScore: 5)
+        #expect(checkIn.score(for: .growth) == 5)
     }
 
     @Test
     func scoreForAllDimensions() {
         let checkIn = DailyCheckIn(
-            energyScore: 2,
-            focusScore: 4,
-            stressScore: 6,
-            growthScore: 8
+            energyScore: 1,
+            focusScore: 2,
+            stressScore: 3,
+            growthScore: 4
         )
         for dimension in DimensionType.allCases {
             let score = checkIn.score(for: dimension)
             switch dimension {
-            case .energy: #expect(score == 2)
-            case .focus: #expect(score == 4)
-            case .stress: #expect(score == 6)
-            case .growth: #expect(score == 8)
+            case .energy: #expect(score == 1)
+            case .focus: #expect(score == 2)
+            case .stress: #expect(score == 3)
+            case .growth: #expect(score == 4)
             }
         }
     }
@@ -176,8 +179,8 @@ struct DailyCheckInTests {
     @Test
     func setScoreForEnergy() {
         let checkIn = DailyCheckIn()
-        checkIn.setScore(9, for: .energy)
-        #expect(checkIn.energyScore == 9)
+        checkIn.setScore(5, for: .energy)
+        #expect(checkIn.energyScore == 5)
     }
 
     @Test
@@ -190,8 +193,8 @@ struct DailyCheckInTests {
     @Test
     func setScoreForStress() {
         let checkIn = DailyCheckIn()
-        checkIn.setScore(8, for: .stress)
-        #expect(checkIn.stressScore == 8)
+        checkIn.setScore(4, for: .stress)
+        #expect(checkIn.stressScore == 4)
     }
 
     @Test
@@ -205,7 +208,7 @@ struct DailyCheckInTests {
     func setScoreClampsAboveMaximum() {
         let checkIn = DailyCheckIn()
         checkIn.setScore(15, for: .energy)
-        #expect(checkIn.energyScore == 10)
+        #expect(checkIn.energyScore == 5)
     }
 
     @Test
@@ -226,7 +229,7 @@ struct DailyCheckInTests {
     func setScoreClampsLargeValue() {
         let checkIn = DailyCheckIn()
         checkIn.setScore(1000, for: .growth)
-        #expect(checkIn.growthScore == 10)
+        #expect(checkIn.growthScore == 5)
     }
 
     @Test
@@ -236,8 +239,8 @@ struct DailyCheckInTests {
         checkIn.setScore(1, for: .energy)
         #expect(checkIn.energyScore == 1)
 
-        checkIn.setScore(10, for: .energy)
-        #expect(checkIn.energyScore == 10)
+        checkIn.setScore(5, for: .energy)
+        #expect(checkIn.energyScore == 5)
     }
 
     // MARK: - Unique ID Tests
@@ -1804,7 +1807,8 @@ struct DimensionTypeTests {
     func labels() {
         #expect(DimensionType.energy.label == "Energy")
         #expect(DimensionType.focus.label == "Focus")
-        #expect(DimensionType.stress.label == "Stress")
+        // The 4th axis is reframed to Calm (enum case + rawValue stay "stress").
+        #expect(DimensionType.stress.label == "Calm")
         #expect(DimensionType.growth.label == "Growth")
     }
 
@@ -1812,16 +1816,8 @@ struct DimensionTypeTests {
     func icons() {
         #expect(DimensionType.energy.icon == "sun.max.fill")
         #expect(DimensionType.focus.icon == "scope")
-        #expect(DimensionType.stress.icon == "bolt.heart.fill")
+        #expect(DimensionType.stress.icon == "wind")
         #expect(DimensionType.growth.icon == "leaf.fill")
-    }
-
-    @Test
-    func isInvertedOnlyForStress() {
-        #expect(DimensionType.energy.isInverted == false)
-        #expect(DimensionType.focus.isInverted == false)
-        #expect(DimensionType.stress.isInverted == true)
-        #expect(DimensionType.growth.isInverted == false)
     }
 
     @Test
@@ -1897,11 +1893,11 @@ struct CrossModelIntegrationTests {
 
     @Test
     func dailyCheckInCompositeScoreRange() {
-        // Verify composite score is always in valid range [1.0, 10.0]
-        for energy in [1, 5, 10] {
-            for focus in [1, 5, 10] {
-                for stress in [1, 5, 10] {
-                    for growth in [1, 5, 10] {
+        // Verify composite score is always in valid range [1.0, 5.0]
+        for energy in [1, 3, 5] {
+            for focus in [1, 3, 5] {
+                for stress in [1, 3, 5] {
+                    for growth in [1, 3, 5] {
                         let checkIn = DailyCheckIn(
                             energyScore: energy,
                             focusScore: focus,
@@ -1909,7 +1905,7 @@ struct CrossModelIntegrationTests {
                             growthScore: growth
                         )
                         #expect(checkIn.compositeScore >= 1.0)
-                        #expect(checkIn.compositeScore <= 10.0)
+                        #expect(checkIn.compositeScore <= 5.0)
                     }
                 }
             }
@@ -1937,8 +1933,8 @@ struct CrossModelIntegrationTests {
         let checkIn = DailyCheckIn()
 
         for dimension in DimensionType.allCases {
-            checkIn.setScore(7, for: dimension)
-            #expect(checkIn.score(for: dimension) == 7)
+            checkIn.setScore(4, for: dimension)
+            #expect(checkIn.score(for: dimension) == 4)
         }
     }
 

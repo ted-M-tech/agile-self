@@ -8,8 +8,9 @@
 import Foundation
 import SwiftData
 
-/// Daily self-assessment with 4-axis scoring (Energy, Focus, Stress, Growth).
-/// Each dimension is scored 1-10. Stress is inverted for composite calculation (lower stress = better).
+/// Daily self-assessment with 4-axis scoring (Energy, Focus, Calm, Growth).
+/// Each dimension is scored 1-5 (1 worst … 5 best), higher = better, and the composite is a
+/// plain average. The 5-level scale is surfaced in the UI as a row of face glyphs.
 @Model
 final class DailyCheckIn {
 
@@ -18,13 +19,15 @@ final class DailyCheckIn {
     @Attribute(.unique) var id: UUID
     /// The calendar day of the check-in, stripped to midnight.
     var date: Date
-    /// Energy score: 1 (depleted) to 10 (fully charged).
+    /// Energy score: 1 (depleted) to 5 (fully charged).
     var energyScore: Int
-    /// Focus score: 1 (scattered) to 10 (laser-focused).
+    /// Focus score: 1 (scattered) to 5 (laser-focused).
     var focusScore: Int
-    /// Stress score: 1 (calm) to 10 (overwhelmed). Low is good.
+    /// Stores Calm (1 tense … 5 very calm); higher is better. The on-disk name is kept as
+    /// `stressScore` for storage stability (avoids a SwiftData schema migration). Read it
+    /// through `calmScore` for clarity.
     var stressScore: Int
-    /// Growth score: 1 (stagnant) to 10 (breakthrough).
+    /// Growth score: 1 (stagnant) to 5 (breakthrough).
     var growthScore: Int
     /// Optional free-text note (max 280 characters).
     var note: String?
@@ -39,10 +42,10 @@ final class DailyCheckIn {
     init(
         id: UUID = UUID(),
         date: Date = Calendar.current.startOfDay(for: Date()),
-        energyScore: Int = 5,
-        focusScore: Int = 5,
-        stressScore: Int = 5,
-        growthScore: Int = 5,
+        energyScore: Int = 3,
+        focusScore: Int = 3,
+        stressScore: Int = 3,
+        growthScore: Int = 3,
         note: String? = nil,
         sentimentScore: Double? = nil,
         dailyInsight: String? = nil,
@@ -50,12 +53,12 @@ final class DailyCheckIn {
     ) {
         self.id = id
         self.date = date
-        // Clamp to the valid 1-10 range so out-of-range values (sync / import /
-        // future callers) can't break compositeScore, which assumes 1-10.
-        self.energyScore = min(max(energyScore, 1), 10)
-        self.focusScore = min(max(focusScore, 1), 10)
-        self.stressScore = min(max(stressScore, 1), 10)
-        self.growthScore = min(max(growthScore, 1), 10)
+        // Clamp to the valid 1-5 range so out-of-range values (sync / import /
+        // future callers) can't break compositeScore, which assumes 1-5.
+        self.energyScore = min(max(energyScore, 1), 5)
+        self.focusScore = min(max(focusScore, 1), 5)
+        self.stressScore = min(max(stressScore, 1), 5)
+        self.growthScore = min(max(growthScore, 1), 5)
         self.note = note
         self.sentimentScore = sentimentScore
         self.dailyInsight = dailyInsight
@@ -64,11 +67,14 @@ final class DailyCheckIn {
 
     // MARK: - Computed Properties
 
-    /// Composite score averaging all four dimensions.
-    /// Stress is inverted (11 - stressScore) so that lower stress contributes positively.
+    /// Read alias for the Calm axis. The value is stored under `stressScore` for storage
+    /// stability; semantically it is Calm (1 tense … 5 very calm, higher = better).
+    var calmScore: Int { stressScore }
+
+    /// Composite score: a plain average of all four dimensions (each 1-5, higher = better).
+    /// A neutral 3/3/3/3 check-in scores exactly 3.0; range is 1.0–5.0.
     var compositeScore: Double {
-        let invertedStress = 11 - stressScore
-        return Double(energyScore + focusScore + invertedStress + growthScore) / 4.0
+        Double(energyScore + focusScore + stressScore + growthScore) / 4.0
     }
 
     /// Returns the score for a given dimension type.
@@ -82,9 +88,9 @@ final class DailyCheckIn {
     }
 
     /// Sets the score for a given dimension type.
-    /// The value is clamped to 1-10.
+    /// The value is clamped to 1-5.
     func setScore(_ value: Int, for dimension: DimensionType) {
-        let clamped = min(max(value, 1), 10)
+        let clamped = min(max(value, 1), 5)
         switch dimension {
         case .energy: energyScore = clamped
         case .focus: focusScore = clamped

@@ -16,14 +16,23 @@ final class InsightsViewModel {
 
     var allCheckIns: [DailyCheckIn] = []
     var correlations: [Correlation] = []
+    /// AI-narrated, honest connection sentences derived from `correlations` (numbers stay
+    /// deterministic). Empty until there's enough matched data — the UI then shows honest copy.
+    var connections: [String] = []
     var patterns: [String] = []
     var streak: Streak?
     var monthlyReport: MonthlyReport?
     var isLoading = false
     var errorMessage: String?
 
+    /// All health snapshots, cached from the last `loadData` so `loadConnections` can narrate
+    /// without re-fetching. Computed over all data (the correlations themselves are all-time).
+    private var allHealth: [HealthSnapshot] = []
+
     /// The currently selected time period for filtering.
-    var selectedPeriod: TimePeriod = .month
+    /// Default to `.week` so brand-new accounts see a sensible window instead of
+    /// a sparse-looking 30-day chart on their first week.
+    var selectedPeriod: TimePeriod = .week
 
     // MARK: - Services
 
@@ -86,6 +95,7 @@ final class InsightsViewModel {
                     sortBy: [SortDescriptor(\.date, order: .forward)]
                 )
                 let healthSnapshots = try context.fetch(healthDescriptor)
+                allHealth = healthSnapshots
                 let detected = analyticsService.detectCorrelations(
                     checkIns: allCheckIns,
                     health: healthSnapshots
@@ -120,5 +130,17 @@ final class InsightsViewModel {
     func loadPatterns() async {
         guard let aiService else { return }
         patterns = (try? await aiService.generatePatterns(from: allCheckIns)) ?? []
+    }
+
+    // MARK: - Load Connections
+
+    /// AI-narrated connection sentences. Empty until there's enough matched data (the UI then
+    /// shows honest "keep checking in" copy). Numbers stay deterministic. Call after `loadData`.
+    func loadConnections() async {
+        guard let aiService else { return }
+        connections = (try? await aiService.generateConnections(
+            checkIns: allCheckIns,
+            health: allHealth
+        )) ?? []
     }
 }
