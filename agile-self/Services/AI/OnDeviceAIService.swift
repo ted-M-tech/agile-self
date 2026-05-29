@@ -138,9 +138,9 @@ final class OnDeviceAIService: AIServiceProtocol, @unchecked Sendable {
     }
 
     nonisolated func generatePatterns(from checkIns: [DailyCheckIn]) async throws -> [String] {
-        guard checkIns.count >= 7 else {
-            return ["Need at least 7 days of data to discover patterns."]
-        }
+        // Below the data threshold: return NO patterns. The Insights empty-state copy explains
+        // this — returning a sentence here would render as a fake "pattern" card.
+        guard checkIns.count >= 7 else { return [] }
 
         var patterns: [String] = []
 

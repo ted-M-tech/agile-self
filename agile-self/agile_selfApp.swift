@@ -101,6 +101,16 @@ struct agile_selfApp: App {
                 runningDistanceMeters: runningMeters
             ))
         }
+
+        // Seed a Streak consistent with the 8 consecutive seeded days so the Insights/Profile
+        // streak cards render a populated state (StreakService.fetchOrCreateStreak reuses this).
+        context.insert(Streak(
+            currentStreak: days.count,
+            longestStreak: days.count,
+            lastCheckInDate: today,
+            totalCheckIns: days.count
+        ))
+
         try? context.save()
     }
 

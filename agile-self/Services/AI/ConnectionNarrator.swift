@@ -187,7 +187,7 @@ enum ConnectionNarrator {
             let dimQuality = dimensionQuality(dimScore)
             let positive = correlation.coefficient >= 0
             let leaning = positive
-                ? "you tend to feel more \(lowercaseDimension(dimensionLabel)) after more \(binding.factor.lowercased())"
+                ? "you tend to feel more \(feelingWord(for: binding.dimension)) after more \(binding.factor.lowercased())"
                 : "more \(binding.factor.lowercased()) tends to track lower \(dimensionLabel) for you"
             return "You logged \(metricPhrase) — and \(leaning). Today's \(dimensionLabel): \(dimQuality)."
         }
@@ -276,8 +276,14 @@ enum ConnectionNarrator {
         }
     }
 
-    /// Lowercases a dimension label for mid-sentence use, but keeps it readable.
-    private static func lowercaseDimension(_ label: String) -> String {
-        label.lowercased()
+    /// The "feel more ___" adjective for a dimension — reads naturally where the bare label
+    /// would not ("feel more energized", not "feel more energy"; "more focused", "more calm").
+    private static func feelingWord(for dimension: DimensionType) -> String {
+        switch dimension {
+        case .energy: return "energized"
+        case .focus: return "focused"
+        case .stress: return "calm"   // the Calm axis (stored under stressScore)
+        case .growth: return "productive"
+        }
     }
 }

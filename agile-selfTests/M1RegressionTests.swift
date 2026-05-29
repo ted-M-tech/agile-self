@@ -195,8 +195,10 @@ struct AIServiceRouterTests {
 
     @Test
     func patternsHandleInsufficientData() async throws {
+        // Insufficient data → no patterns (the UI shows honest empty-state copy). Previously a
+        // "Need 7 days" sentinel string leaked through and rendered as a fake pattern card.
         let patterns = try await makeRouter().generatePatterns(from: [DailyCheckIn()])
-        #expect(!patterns.isEmpty)
+        #expect(patterns.isEmpty)
     }
 
     @Test
@@ -231,8 +233,10 @@ struct FoundationModelsFallbackTests {
 
     @Test
     func patternsPreserveInsufficientDataGuard() async throws {
+        // Below the 7-day threshold, patterns are empty (the UI shows honest empty-state copy);
+        // a sentinel "Need 7 days" string would otherwise render as a fake pattern card.
         let patterns = try await FoundationModelsAIService().generatePatterns(from: [DailyCheckIn()])
-        #expect(patterns == ["Need at least 7 days of data to discover patterns."])
+        #expect(patterns.isEmpty)
     }
 
     @Test

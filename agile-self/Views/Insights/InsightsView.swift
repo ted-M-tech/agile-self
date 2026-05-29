@@ -75,7 +75,6 @@ struct InsightsView: View {
                     } else if viewModel.allCheckIns.isEmpty {
                         insightsEmptyView
                     } else {
-                        periodPicker
                         scoreTrendSection
                         connectionsSection
                         patternsSection
@@ -195,6 +194,10 @@ struct InsightsView: View {
     private var scoreTrendSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(title: "SCORE TREND", icon: "chart.xyaxis.line")
+
+            // The period control lives inside this card so it clearly scopes to the trend chart
+            // only — Connections, Patterns, and Streak below are all-time by nature.
+            periodPicker
 
             // Main chart (or a hint when there is nothing to plot yet)
             if filteredCheckIns.count <= 1 {

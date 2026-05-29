@@ -125,9 +125,9 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
     nonisolated func generatePatterns(from checkIns: [DailyCheckIn]) async throws -> [String] {
         // Phase 2: derive patterns from anonymized data via Gemini.
         _ = anonymize(checkIns: checkIns)
-        guard checkIns.count >= 7 else {
-            return ["Need at least 7 days of data to discover patterns."]
-        }
+        // Below the data threshold: return NO patterns (the Insights empty-state copy explains
+        // this) rather than a sentinel string that would render as a fake "pattern" card.
+        guard checkIns.count >= 7 else { return [] }
         return [
             "Focus peaks on your most active days.",
             "Sleep quality strongly shapes next-day stress.",
