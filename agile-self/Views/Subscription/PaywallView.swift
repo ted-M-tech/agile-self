@@ -388,7 +388,7 @@ private let benefitRows: [BenefitRowData] = [
     BenefitRowData(
         icon: "checkmark.seal.fill",
         title: "Everything, included",
-        detail: "Check-ins, health insights, weekly reviews, reports, charts, and widgets — all of it."
+        detail: "Check-ins, health insights, connections, reports, charts, and widgets — all of it."
     ),
     BenefitRowData(
         icon: "heart.fill",

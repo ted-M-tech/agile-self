@@ -44,7 +44,6 @@ enum TimePeriod: String, CaseIterable {
 // MARK: - Insights View
 
 struct InsightsView: View {
-    var onShowWeeklyReview: (() -> Void)?
     var onShowMonthlyReport: (() -> Void)?
 
     @Environment(AppContainer.self) private var appContainer
@@ -518,37 +517,6 @@ struct InsightsView: View {
 
     private var reviewActionsSection: some View {
         VStack(spacing: Theme.Spacing.md) {
-            if let onShowWeeklyReview {
-                Button(action: onShowWeeklyReview) {
-                    HStack(spacing: Theme.Spacing.md) {
-                        Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                            .font(.title3)
-                            .foregroundStyle(Theme.Dimension.focus)
-
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                            Text("Weekly AI Review")
-                                .font(Theme.Typography.headline)
-                                .foregroundStyle(Theme.Colors.textPrimary)
-
-                            Text("Reflect on your week with AI coaching")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                    }
-                    .padding(Theme.Spacing.md)
-                    .background(Theme.Colors.backgroundSecondary)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Start Weekly AI Review")
-            }
-
             if let onShowMonthlyReport {
                 Button(action: onShowMonthlyReport) {
                     HStack(spacing: Theme.Spacing.md) {

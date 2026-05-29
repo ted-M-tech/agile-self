@@ -64,22 +64,6 @@ final class AIServiceRouter: AIServiceProtocol, @unchecked Sendable {
         try await localService.generateDailyInsight(checkIn: checkIn)
     }
 
-    /// Weekly questions use Gemini when allowed, otherwise on-device heuristics.
-    nonisolated func generateWeeklyQuestions(
-        checkIns: [DailyCheckIn],
-        health: [HealthSnapshot]
-    ) async throws -> [String] {
-        try await localService.generateWeeklyQuestions(checkIns: checkIns, health: health)
-    }
-
-    /// Weekly summary uses Gemini when allowed for deeper conversation analysis.
-    nonisolated func generateWeeklySummary(
-        conversation: [ConversationMessage],
-        checkIns: [DailyCheckIn]
-    ) async throws -> WeeklySummaryResult {
-        try await localService.generateWeeklySummary(conversation: conversation, checkIns: checkIns)
-    }
-
     /// Monthly report uses Gemini when allowed for comprehensive trend analysis.
     nonisolated func generateMonthlyReport(
         checkIns: [DailyCheckIn],

@@ -122,12 +122,13 @@ struct HeatmapCalendarView: View {
         guard let score else {
             return Theme.Colors.backgroundTertiary
         }
-        // Map score 1-5 to opacity 0.15-1.0
+        // Map score 1-5 to opacity 0.25-1.0. A 0.25 floor keeps the lowest scores legible
+        // and distinct from the (greyer) no-data cells — 0.15 was nearly invisible.
         let normalizedScore = (score - 1.0) / 4.0
         let clampedScore = max(0, min(normalizedScore, 1.0))
 
         // Blend from dim accent to full accent
-        return Theme.Colors.accentStart.opacity(0.15 + clampedScore * 0.85)
+        return Theme.Colors.accentStart.opacity(0.25 + clampedScore * 0.75)
     }
 
     private func cellAccessibilityLabel(day: CalendarDay) -> String {
@@ -149,7 +150,7 @@ struct HeatmapCalendarView: View {
                 .foregroundStyle(Theme.Colors.textTertiary)
 
             HStack(spacing: 3) {
-                ForEach([0.15, 0.35, 0.55, 0.75, 1.0], id: \.self) { opacity in
+                ForEach([0.25, 0.45, 0.65, 0.82, 1.0], id: \.self) { opacity in
                     RoundedRectangle(cornerRadius: 2)
                         .fill(Theme.Colors.accentStart.opacity(opacity))
                         .frame(width: 12, height: 12)

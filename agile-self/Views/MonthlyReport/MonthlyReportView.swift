@@ -34,23 +34,18 @@ struct MonthlyReportView: View {
 
                 if viewModel.isLoading || viewModel.isGenerating {
                     loadingState
-                } else if !viewModel.hasData {
-                    emptyState
+                } else if viewModel.isReportReady {
+                    // A renderable report takes precedence over a transient load error so a
+                    // re-load failure never blows away an already-generated report.
+                    reportContent
+                } else if let error = viewModel.errorMessage {
+                    errorState(error)
+                } else if viewModel.needsMoreCheckIns {
+                    needsMoreDataState
                 } else {
-                    ScrollView {
-                        VStack(spacing: Theme.Spacing.lg) {
-                            overallScoreGauge
-                            trendChartSection
-                            heatmapSection
-                            correlationsSection
-                            executiveSummarySection
-                            shareButton
-                            Spacer(minLength: Theme.Spacing.xxl)
-                        }
-                        .padding(.horizontal, Theme.Spacing.md)
-                        .padding(.top, Theme.Spacing.sm)
-                    }
-                    .scrollIndicators(.hidden)
+                    // ≥ threshold check-ins, but the report isn't generated yet (e.g. the model
+                    // returned empty content this pass). Not an error, not "log more" — just pending.
+                    reportPendingState
                 }
             }
         }
@@ -85,25 +80,129 @@ struct MonthlyReportView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var emptyState: some View {
-        VStack(spacing: Theme.Spacing.md) {
+    /// Shown while still below the check-in threshold (count < required). Distinguishes
+    /// "no check-ins yet" from "a few logged, almost there" with explicit progress — instead
+    /// of a meaningless 0.0 gauge with empty sections. (The count ≥ required case is handled
+    /// separately by `reportPendingState`, so `remaining` here is always ≥ 1.)
+    private var needsMoreDataState: some View {
+        let count = viewModel.checkInCount
+        let required = viewModel.minimumCheckInsToGenerate
+        let remaining = max(0, required - count)
+
+        return VStack(spacing: Theme.Spacing.md) {
             Spacer()
             Image(systemName: "calendar.badge.clock")
                 .font(.system(size: 44))
                 .foregroundStyle(Theme.Colors.textTertiary)
-            Text("Not enough data this month")
+
+            Text(count == 0 ? "No check-ins yet this month" : "Building your report")
                 .font(Theme.Typography.headline)
                 .foregroundStyle(Theme.Colors.textPrimary)
-            Text("Check in daily to unlock your monthly report.")
+
+            Text(insufficientDataMessage(count: count, required: required, remaining: remaining))
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, Theme.Spacing.xl)
+
+            if count > 0 {
+                ProgressView(value: Double(min(count, required)), total: Double(required))
+                    .tint(Theme.Colors.accentStart)
+                    .frame(maxWidth: 180)
+                    .padding(.top, Theme.Spacing.xs)
+
+                Text("\(count) of \(required) check-ins")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(insufficientDataMessage(count: count, required: required, remaining: remaining))
+    }
+
+    private func insufficientDataMessage(count: Int, required: Int, remaining: Int) -> String {
+        if count == 0 {
+            return "Check in daily — your monthly report appears here once you've logged \(required) days."
+        }
+        return "Log \(remaining) more check-in\(remaining == 1 ? "" : "s") this month to unlock your AI-generated report with trends and patterns."
+    }
+
+    private func errorState(_ message: String) -> some View {
+        VStack(spacing: Theme.Spacing.md) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(Theme.Colors.warning)
+
+            Text("Something went wrong")
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.textPrimary)
+
+            Text(message)
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Theme.Spacing.xl)
+
+            Button {
+                Task { await viewModel.loadData(context: modelContext) }
+            } label: {
+                Text("Try Again")
+                    .secondaryButtonStyle()
+            }
+            .padding(.top, Theme.Spacing.sm)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Reached when there are enough check-ins (≥ threshold) but the report still isn't
+    /// generated — e.g. the model returned empty content this pass. It will regenerate as more
+    /// data accrues, so this is a calm "pending" state, not an error and not "log more".
+    private var reportPendingState: some View {
+        VStack(spacing: Theme.Spacing.md) {
+            Spacer()
+            Image(systemName: "hourglass")
+                .font(.system(size: 40))
+                .foregroundStyle(Theme.Colors.textTertiary)
+
+            Text("Your report is on its way")
+                .font(Theme.Typography.headline)
+                .foregroundStyle(Theme.Colors.textPrimary)
+
+            Text("We couldn't put your report together just yet. Check back after your next check-in.")
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, Theme.Spacing.xl)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Not enough data this month. Check in daily to unlock your monthly report.")
+        .accessibilityLabel("Your report is on its way. We couldn't put your report together just yet. Check back after your next check-in.")
+    }
+
+    // MARK: - Full Report
+
+    private var reportContent: some View {
+        ScrollView {
+            VStack(spacing: Theme.Spacing.lg) {
+                overallScoreGauge
+                trendChartSection
+                heatmapSection
+                correlationsSection
+                executiveSummarySection
+                shareButton
+                Spacer(minLength: Theme.Spacing.xxl)
+            }
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.top, Theme.Spacing.sm)
+        }
+        .scrollIndicators(.hidden)
     }
 
     // MARK: - Top Bar
@@ -320,12 +419,17 @@ struct MonthlyReportView: View {
 
     // MARK: - 4. Correlations
 
+    @ViewBuilder
     private var correlationsSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            sectionHeader(title: "CORRELATIONS", icon: "arrow.triangle.branch")
+        // Hide entirely when there are no correlations yet (e.g. no matched Health data),
+        // rather than showing a lone header over empty space.
+        if let correlations = report?.correlations, !correlations.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                sectionHeader(title: "CORRELATIONS", icon: "arrow.triangle.branch")
 
-            ForEach(report?.correlations ?? []) { correlation in
-                correlationRow(correlation)
+                ForEach(correlations) { correlation in
+                    correlationRow(correlation)
+                }
             }
         }
     }
@@ -363,26 +467,30 @@ struct MonthlyReportView: View {
 
     // MARK: - 5. Executive Summary
 
+    @ViewBuilder
     private var executiveSummarySection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            sectionHeader(title: "EXECUTIVE SUMMARY", icon: "doc.text.fill")
+        // Only render the card when there is summary text — never a header-only empty card.
+        if let summary = report?.executiveSummary, !summary.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                sectionHeader(title: "EXECUTIVE SUMMARY", icon: "doc.text.fill")
 
-            if let summary = report?.executiveSummary {
                 Text(summary)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .lineSpacing(6)
             }
+            .cardStyle()
         }
-        .cardStyle()
     }
 
     // MARK: - Share Button
 
     @ViewBuilder
     private var shareButton: some View {
-        if let report {
+        // Only offer sharing once the report is actually generated (avoids sharing an
+        // empty/half-built report).
+        if let report, report.isGenerated {
             ShareLink(
                 item: ShareContentBuilder.monthlyReportText(report, checkIns: checkIns),
                 subject: Text("My Monthly Report")

@@ -10,38 +10,6 @@ import Foundation
 
 enum ShareContentBuilder {
 
-    /// Plain-text summary of a completed weekly review.
-    /// Suggested actions are intentionally omitted (they have no persisted home in M2).
-    static func weeklySummaryText(_ review: WeeklyReview) -> String {
-        var lines: [String] = []
-        lines.append("Weekly Summary")
-        lines.append(dateRange(start: review.weekStart, end: review.weekEnd))
-        lines.append("")
-
-        if !review.wins.isEmpty {
-            lines.append("Wins")
-            lines.append(contentsOf: review.wins.map { "\u{2022} \($0)" })
-            lines.append("")
-        }
-        if !review.challenges.isEmpty {
-            lines.append("Challenges")
-            lines.append(contentsOf: review.challenges.map { "\u{2022} \($0)" })
-            lines.append("")
-        }
-        if let summary = review.summary, !summary.isEmpty {
-            lines.append("Summary")
-            lines.append(summary)
-            lines.append("")
-        }
-        if let takeaway = review.aiTakeaway, !takeaway.isEmpty {
-            lines.append("AI Takeaway")
-            lines.append(takeaway)
-            lines.append("")
-        }
-        lines.append("\u{2014} Shared from Agile Self")
-        return lines.joined(separator: "\n")
-    }
-
     /// Plain-text summary of a monthly report.
     static func monthlyReportText(_ report: MonthlyReport, checkIns: [DailyCheckIn]) -> String {
         var lines: [String] = []
@@ -78,12 +46,6 @@ enum ShareContentBuilder {
     }
 
     // MARK: - Helpers
-
-    private static func dateRange(start: Date, end: Date) -> String {
-        let startStr = start.formatted(.dateTime.month(.abbreviated).day())
-        let endStr = end.formatted(.dateTime.month(.abbreviated).day())
-        return "\(startStr) - \(endStr)"
-    }
 
     private static func monthYear(month: Int, year: Int) -> String {
         var components = DateComponents()

@@ -23,39 +23,6 @@ struct GenerableDailyInsight {
 }
 
 @available(iOS 26, *)
-@Generable(description: "Open-ended coaching questions for a weekly review")
-struct GenerableWeeklyQuestions {
-    @Guide(description: "Open-ended weekly-review coaching questions, one per element, no numbering.")
-    var questions: [String]
-}
-
-@available(iOS 26, *)
-@Generable(description: "A structured weekly self-reflection summary")
-struct GenerableWeeklySummary {
-    @Guide(description: "Concrete wins from the week, short phrases.")
-    var wins: [String]
-    @Guide(description: "Challenges or struggles from the week, short phrases.")
-    var challenges: [String]
-    @Guide(description: "A 2-3 sentence narrative summary of the week.")
-    var summary: String
-    @Guide(description: "One actionable coaching takeaway sentence for next week.")
-    var aiTakeaway: String
-    @Guide(description: "Specific, concrete actions to try next week.")
-    var suggestedActions: [String]
-
-    /// Counts are clamped here (not via @Guide) to keep the first build's API surface minimal.
-    func toResult() -> WeeklySummaryResult {
-        WeeklySummaryResult(
-            wins: Array(wins.prefix(4)),
-            challenges: Array(challenges.prefix(4)),
-            summary: summary,
-            aiTakeaway: aiTakeaway,
-            suggestedActions: Array(suggestedActions.prefix(3))
-        )
-    }
-}
-
-@available(iOS 26, *)
 @Generable(description: "The narrative portion of a monthly self-reflection report")
 struct GenerableMonthlyReport {
     @Guide(description: "A 3-4 sentence executive summary of the month's trend. Do not state any numbers you were not given.")

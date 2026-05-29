@@ -23,7 +23,6 @@ struct SettingsView: View {
     @State private var displayName: String = ""
     @State private var reminderEnabled: Bool = true
     @State private var reminderTime: Date = SettingsView.defaultReminderTime
-    @State private var weeklyReviewDay: Int = 6
     @State private var allowCloudAI: Bool = false
     @State private var notificationsEnabled: Bool = true
     @State private var showPaywall: Bool = false
@@ -37,11 +36,6 @@ struct SettingsView: View {
     @State private var showDeleteConfirmation = false
 
     // MARK: - Constants
-
-    private static let weekdays = [
-        "Sunday", "Monday", "Tuesday", "Wednesday",
-        "Thursday", "Friday", "Saturday",
-    ]
 
     private static var defaultReminderTime: Date {
         var components = DateComponents()
@@ -65,7 +59,6 @@ struct SettingsView: View {
                     accountSection
                     languageSection
                     reminderSection
-                    weeklyReviewSection
                     aiPrivacySection
                     healthDataSection
                     subscriptionSection
@@ -267,48 +260,6 @@ struct SettingsView: View {
             .background(Theme.Colors.backgroundSecondary)
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
             .animation(Theme.Animation.standard, value: reminderEnabled)
-        }
-    }
-
-    // MARK: - Weekly Review Section
-
-    private var weeklyReviewSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            sectionHeader(title: "WEEKLY REVIEW")
-
-            VStack(spacing: 0) {
-                HStack(spacing: Theme.Spacing.md) {
-                    Image(systemName: "calendar.badge.clock")
-                        .font(.callout)
-                        .foregroundStyle(Theme.Dimension.focus)
-                        .frame(width: 24, height: 24)
-
-                    Text("Review Day")
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-
-                    Spacer()
-
-                    Picker("", selection: $weeklyReviewDay) {
-                        ForEach(1...7, id: \.self) { day in
-                            Text(Self.weekdays[day - 1])
-                                .tag(day)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .tint(Theme.Colors.accentEnd)
-                    .onChange(of: weeklyReviewDay) { _, newValue in
-                        saveWeeklyReviewDay(newValue)
-                    }
-                }
-                .padding(.horizontal, Theme.Spacing.md)
-                .padding(.vertical, Theme.Spacing.md)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Weekly review day")
-                .accessibilityValue(Self.weekdays[weeklyReviewDay - 1])
-            }
-            .background(Theme.Colors.backgroundSecondary)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
         }
     }
 
@@ -808,7 +759,6 @@ struct SettingsView: View {
     private func loadProfile() {
         guard let profile else { return }
         displayName = profile.displayName ?? ""
-        weeklyReviewDay = profile.weeklyReviewDay
         allowCloudAI = profile.allowCloudAI
         notificationsEnabled = profile.notificationsEnabled
 
@@ -830,11 +780,6 @@ struct SettingsView: View {
         let components = Calendar.current.dateComponents([.hour, .minute], from: reminderTime)
         profile.checkInReminderHour = components.hour ?? 21
         profile.checkInReminderMinute = components.minute ?? 0
-    }
-
-    private func saveWeeklyReviewDay(_ day: Int) {
-        guard let profile else { return }
-        profile.weeklyReviewDay = day
     }
 
     private func saveCloudAI(_ enabled: Bool) {

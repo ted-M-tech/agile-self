@@ -2,23 +2,26 @@
 //  NotificationService.swift
 //  agile-self
 //
-//  Smart notification scheduling for daily check-in reminders and weekly review nudges.
+//  Smart notification scheduling for daily check-in reminders.
 //
 
 import Foundation
 import UserNotifications
 
-/// Manages local notification scheduling for check-in reminders and weekly reviews.
+/// Manages local notification scheduling for check-in reminders.
 ///
 /// Notification types:
 /// - **Daily reminder** -- configurable hour/minute, fires if user hasn't checked in
-/// - **Weekly review** -- configurable day of week, prompts the AI review session
+///
+/// NOTE: the weekly-review nudge was retired with the weekly-review feature. Its identifier is
+/// retained only so `cancelAll()` clears any weekly notification left over from older builds.
 final class NotificationService {
 
     // MARK: - Notification Identifiers
 
     private enum Identifier {
         static let dailyReminder = "com.agileself.daily-reminder"
+        /// Retired (weekly review cut). Kept so `cancelAll()` can remove stale scheduled ones.
         static let weeklyReview = "com.agileself.weekly-review"
     }
 
@@ -63,39 +66,6 @@ final class NotificationService {
         let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
         let request = UNNotificationRequest(
             identifier: Identifier.dailyReminder,
-            content: content,
-            trigger: trigger
-        )
-
-        center.add(request)
-    }
-
-    // MARK: - Weekly Review
-
-    /// Schedules a weekly review reminder on the specified day.
-    /// Replaces any existing weekly review reminder.
-    ///
-    /// - Parameter dayOfWeek: Day of week (1 = Sunday, 7 = Saturday). Default: 6 (Friday).
-    func scheduleWeeklyReview(dayOfWeek: Int = 6) {
-        let center = UNUserNotificationCenter.current()
-
-        // Remove existing weekly reminder
-        center.removePendingNotificationRequests(withIdentifiers: [Identifier.weeklyReview])
-
-        let content = UNMutableNotificationContent()
-        content.title = "Weekly Review Ready"
-        content.body = "Your week's data is ready. Let's review together."
-        content.sound = .default
-        content.categoryIdentifier = "WEEKLY_REVIEW"
-
-        var dateComponents = DateComponents()
-        dateComponents.weekday = dayOfWeek
-        dateComponents.hour = 18  // 6 PM on the configured day
-        dateComponents.minute = 0
-
-        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-        let request = UNNotificationRequest(
-            identifier: Identifier.weeklyReview,
             content: content,
             trigger: trigger
         )

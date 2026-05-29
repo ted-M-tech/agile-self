@@ -242,7 +242,6 @@ struct OnboardingContainerView: View {
                     hour: profile.checkInReminderHour,
                     minute: profile.checkInReminderMinute
                 )
-                appContainer.notificationService.scheduleWeeklyReview(dayOfWeek: profile.weeklyReviewDay)
             }
         } else {
             profile.notificationsEnabled = false
@@ -284,10 +283,10 @@ struct OnboardingContainerView: View {
                 connectionLine
 
                 howItWorksCard(
-                    icon: "bubble.left.and.bubble.right.fill",
-                    title: "Weekly",
-                    subtitle: "3-5 minutes",
-                    description: "AI-guided review to discover patterns and set actions.",
+                    icon: "wand.and.stars",
+                    title: "Connections",
+                    subtitle: "Over time",
+                    description: "See how your sleep, steps, and activity line up with how you feel.",
                     accentColor: Theme.Dimension.focus
                 )
 

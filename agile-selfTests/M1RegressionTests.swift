@@ -236,12 +236,6 @@ struct FoundationModelsFallbackTests {
     }
 
     @Test
-    func weeklySummaryFallsBackNonEmpty() async throws {
-        let result = try await FoundationModelsAIService().generateWeeklySummary(conversation: [], checkIns: [DailyCheckIn()])
-        #expect(!result.summary.isEmpty)
-    }
-
-    @Test
     func monthlyReportNumbersAreDeterministic() async throws {
         let checkIns: [DailyCheckIn] = []
         let health: [HealthSnapshot] = []

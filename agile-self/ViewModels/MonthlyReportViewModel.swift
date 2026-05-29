@@ -23,9 +23,20 @@ final class MonthlyReportViewModel {
 
     /// Minimum check-ins before a report is generated, so a 1-2 check-in month is not
     /// frozen at a meaningless score.
-    private let minimumCheckInsToGenerate = 3
+    let minimumCheckInsToGenerate = 3
 
-    var hasData: Bool { !monthCheckIns.isEmpty }
+    /// Number of check-ins logged this month.
+    var checkInCount: Int { monthCheckIns.count }
+
+    /// True only once a real report has been generated (≥ `minimumCheckInsToGenerate`
+    /// check-ins + non-empty AI content). The full report UI is gated on this so a sparse
+    /// month never renders a meaningless 0.0 gauge + empty sections.
+    /// NOTE: do NOT gate the full report on "has ≥1 check-in" — a 1–2 check-in month is
+    /// intentionally NOT ready (that was the 0.0-gauge bug).
+    var isReportReady: Bool { report?.isGenerated == true }
+
+    /// Still collecting the minimum check-ins needed before a report can be generated.
+    var needsMoreCheckIns: Bool { checkInCount < minimumCheckInsToGenerate }
 
     // MARK: - Services
 

@@ -76,63 +76,6 @@ final class FoundationModelsAIService: AIServiceProtocol, @unchecked Sendable {
         return try await fallback.generateDailyInsight(checkIn: checkIn)
     }
 
-    nonisolated func generateWeeklyQuestions(
-        checkIns: [DailyCheckIn],
-        health: [HealthSnapshot]
-    ) async throws -> [String] {
-        guard isModelAvailable else {
-            return try await fallback.generateWeeklyQuestions(checkIns: checkIns, health: health)
-        }
-        #if canImport(FoundationModels)
-        if #available(iOS 26, *) {
-            do {
-                let session = LanguageModelSession(instructions: "You are a thoughtful weekly-review coach. Produce open-ended questions that help the user reflect on the past week.")
-                let response = try await session.respond(
-                    to: Self.weeklyQuestionsPrompt(checkIns: checkIns, health: health),
-                    generating: GenerableWeeklyQuestions.self
-                )
-                let questions = response.content.questions
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                if !questions.isEmpty {
-                    AppLog.ai.notice("weeklyQuestions backend=foundationModels count=\(questions.count, privacy: .public)")
-                    return Array(questions.prefix(6))
-                }
-            } catch {
-                // fall through to heuristic
-            }
-        }
-        #endif
-        AppLog.ai.notice("weeklyQuestions backend=heuristic")
-        return try await fallback.generateWeeklyQuestions(checkIns: checkIns, health: health)
-    }
-
-    nonisolated func generateWeeklySummary(
-        conversation: [ConversationMessage],
-        checkIns: [DailyCheckIn]
-    ) async throws -> WeeklySummaryResult {
-        guard isModelAvailable else {
-            return try await fallback.generateWeeklySummary(conversation: conversation, checkIns: checkIns)
-        }
-        #if canImport(FoundationModels)
-        if #available(iOS 26, *) {
-            do {
-                let session = LanguageModelSession(instructions: "You are a self-growth coach summarizing a user's week from their check-in numbers and reflection notes. Be concrete and encouraging; never invent statistics.")
-                let response = try await session.respond(
-                    to: Self.weeklySummaryPrompt(conversation: conversation, checkIns: checkIns),
-                    generating: GenerableWeeklySummary.self
-                )
-                AppLog.ai.notice("weeklySummary backend=foundationModels")
-                return response.content.toResult()
-            } catch {
-                // fall through to heuristic
-            }
-        }
-        #endif
-        AppLog.ai.notice("weeklySummary backend=heuristic")
-        return try await fallback.generateWeeklySummary(conversation: conversation, checkIns: checkIns)
-    }
-
     nonisolated func generateMonthlyReport(
         checkIns: [DailyCheckIn],
         health: [HealthSnapshot]
@@ -264,49 +207,6 @@ final class FoundationModelsAIService: AIServiceProtocol, @unchecked Sendable {
     private static func average(_ values: [Int]) -> Double {
         guard !values.isEmpty else { return 0 }
         return Double(values.reduce(0, +)) / Double(values.count)
-    }
-
-    private static func weeklyQuestionsPrompt(checkIns: [DailyCheckIn], health: [HealthSnapshot]) -> String {
-        guard !checkIns.isEmpty else {
-            return "The user has no check-ins logged this week. Ask 4 gentle, open-ended questions to help them reflect on their week and restart the habit."
-        }
-        let avgComposite = checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
-        var lines = [
-            "Weekly check-in aggregates (1-5 scales, higher is better; composite is a plain average; Calm 5 = very calm):",
-            "Days logged: \(checkIns.count)",
-            String(format: "Avg composite: %.1f", avgComposite),
-            String(format: "Avg energy: %.1f, focus: %.1f, calm: %.1f, growth: %.1f",
-                   average(checkIns.map(\.energyScore)), average(checkIns.map(\.focusScore)),
-                   average(checkIns.map(\.stressScore)), average(checkIns.map(\.growthScore))),
-        ]
-        let sleeps = health.compactMap(\.sleepMinutes)
-        if !sleeps.isEmpty {
-            lines.append(String(format: "Avg sleep: %.1f h", Double(sleeps.reduce(0, +)) / Double(sleeps.count) / 60.0))
-        }
-        lines.append("Generate up to 6 open-ended coaching questions tailored to these aggregates, plus one forward-looking question about next week.")
-        return lines.joined(separator: "\n")
-    }
-
-    private static func weeklySummaryPrompt(conversation: [ConversationMessage], checkIns: [DailyCheckIn]) -> String {
-        let avgComposite = checkIns.isEmpty ? 3.0 : checkIns.map(\.compositeScore).reduce(0, +) / Double(checkIns.count)
-        let best = checkIns.max(by: { $0.compositeScore < $1.compositeScore })?.compositeScore
-        let worst = checkIns.min(by: { $0.compositeScore < $1.compositeScore })?.compositeScore
-        var lines = [
-            "Summarize the user's week from these aggregates and their own reflection replies.",
-            "Days logged: \(checkIns.count)",
-            String(format: "Avg composite: %.1f", avgComposite),
-        ]
-        if let best { lines.append(String(format: "Best day composite: %.1f", best)) }
-        if let worst { lines.append(String(format: "Lowest day composite: %.1f", worst)) }
-        let replies = conversation.filter { $0.role == .user }.map(\.content)
-        if !replies.isEmpty {
-            lines.append("User reflection replies:")
-            for (i, r) in replies.prefix(8).enumerated() {
-                lines.append("Reply \(i + 1): \(r)")
-            }
-        }
-        lines.append("Produce concrete wins, challenges, a short narrative summary, one actionable takeaway, and specific suggested actions for next week. Do not invent numbers beyond those given.")
-        return lines.joined(separator: "\n")
     }
 
     private static func monthlyReportPrompt(checkIns: [DailyCheckIn], avgComposite: Double, correlations: [Correlation]) -> String {
