@@ -168,7 +168,7 @@ Subscriptions.storekit               # Local StoreKit test config (M2/D7)
 - DimensionType enum defined in Theme.swift (shared across models/views)
 
 ### Concurrency
-- Swift 5 language mode with `SWIFT_APPROACHABLE_CONCURRENCY = YES`. There is **no** `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` — types are **nonisolated by default** unless explicitly marked `@MainActor`.
+- Swift 5 language mode with `SWIFT_APPROACHABLE_CONCURRENCY = YES` **and `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`** (both set on the app + Watch App targets, Debug & Release — verified in `project.pbxproj`). So unannotated types/members are **`@MainActor`-isolated by default**; mark a declaration `nonisolated` to opt out. (The pbxproj is the source of truth; a doc claiming "nonisolated by default" is stale/wrong.)
 - `@MainActor` closures stored in `@Observable` classes must be `@ObservationIgnored` (the macro can't synthesize a tracked accessor for a global-actor closure type).
 - SourceKit single-file diagnostics ("cannot find type X" for cross-file symbols, or actor-isolation/await warnings) are frequently FALSE POSITIVES — `xcodebuild` is the source of truth.
 
