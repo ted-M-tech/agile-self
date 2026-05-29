@@ -42,7 +42,8 @@ final class AppContainer {
         if let existing = _aiService { return existing }
         let router = AIServiceRouter(
             onDeviceService: OnDeviceAIService(),
-            geminiService: GeminiAIService()
+            geminiService: GeminiAIService(),
+            foundationModelsService: FoundationModelsAIService()
         )
         _aiService = router
         return router

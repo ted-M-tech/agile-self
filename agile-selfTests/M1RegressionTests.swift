@@ -206,6 +206,47 @@ struct AIServiceRouterTests {
     }
 }
 
+// MARK: - Foundation Models fallback contract (M3)
+
+@MainActor
+struct FoundationModelsFallbackTests {
+
+    // On the simulator / hosts without Apple Intelligence the model is unavailable, so
+    // every FoundationModelsAIService method must degrade to the OnDeviceAIService
+    // heuristics — non-empty, well-formed output, no crash. These assert the deterministic
+    // fallback path only (never LLM-generated text).
+
+    @Test
+    func dailyInsightFallsBackNonEmpty() async throws {
+        let insight = try await FoundationModelsAIService().generateDailyInsight(checkIn: DailyCheckIn())
+        #expect(!insight.isEmpty)
+    }
+
+    @Test
+    func patternsPreserveInsufficientDataGuard() async throws {
+        let patterns = try await FoundationModelsAIService().generatePatterns(from: [DailyCheckIn()])
+        #expect(patterns == ["Need at least 7 days of data to discover patterns."])
+    }
+
+    @Test
+    func weeklySummaryFallsBackNonEmpty() async throws {
+        let result = try await FoundationModelsAIService().generateWeeklySummary(conversation: [], checkIns: [DailyCheckIn()])
+        #expect(!result.summary.isEmpty)
+    }
+
+    @Test
+    func monthlyReportNumbersAreDeterministic() async throws {
+        let checkIns: [DailyCheckIn] = []
+        let health: [HealthSnapshot] = []
+        let result = try await FoundationModelsAIService().generateMonthlyReport(checkIns: checkIns, health: health)
+        // Correlation is not Equatable, so compare count against the deterministic source.
+        let expected = AnalyticsService().detectCorrelations(checkIns: checkIns, health: health)
+        #expect(result.correlations.count == expected.count)
+        // avgComposite for empty check-ins is 5.0 — the LLM never alters this number.
+        #expect(result.overallScore == 5.0)
+    }
+}
+
 // MARK: - Versioned schema foundation (#12)
 
 @MainActor
