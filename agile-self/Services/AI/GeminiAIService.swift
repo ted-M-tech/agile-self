@@ -129,8 +129,8 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
         // this) rather than a sentinel string that would render as a fake "pattern" card.
         guard checkIns.count >= 7 else { return [] }
         return [
-            "Focus peaks on your most active days.",
-            "Sleep quality strongly shapes next-day stress.",
+            "Focus tends to peak on your most active days.",
+            "On nights with better sleep, your Calm tends to run higher the next day.",
             "A midweek energy dip recurs in your data.",
         ]
     }

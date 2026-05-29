@@ -793,6 +793,10 @@ struct SettingsView: View {
     private func loadProfile() {
         guard let profile else { return }
         displayName = profile.displayName ?? ""
+        // Guard the programmatic flip so loading the profile never re-fires setReminder via
+        // the Toggle's onChange (only set the flag when the value will actually change, so it
+        // isn't left stuck true on a no-op load).
+        isSyncingReminder = (reminderEnabled != profile.notificationsEnabled)
         reminderEnabled = profile.notificationsEnabled
 
         var components = DateComponents()

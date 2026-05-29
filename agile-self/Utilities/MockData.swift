@@ -114,9 +114,9 @@ enum MockData {
         let report = MonthlyReport(
             month: 2,
             year: 2026,
-            executiveSummary: "February has been a month of steady growth. Your composite score improved from 6.2 (Week 1) to 7.4 (Week 4), driven primarily by increased exercise frequency and better sleep consistency. The biggest area for improvement remains stress management, particularly on meeting-heavy days.",
-            topInsight: "Running 3+ times per week correlates with a 23% higher focus score and 31% lower stress.",
-            overallScore: 7.1,
+            executiveSummary: "February has been a month of steady growth. Your composite score climbed from 3.6 (Week 1) to 4.1 (Week 4), driven by more consistent exercise and better sleep. The biggest opportunity is staying calm on meeting-heavy days.",
+            topInsight: "Running 3+ times per week lines up with a 23% higher focus score and steadier calm.",
+            overallScore: 4.1,
             isGenerated: true,
             generatedAt: Date()
         )
@@ -265,9 +265,9 @@ enum MockData {
         let report = MonthlyReport(
             month: 2,
             year: 2026,
-            executiveSummary: "February has been a month of steady growth. Your composite score improved from 6.2 (Week 1) to 7.4 (Week 4), driven primarily by increased exercise frequency and better sleep consistency. The biggest area for improvement remains stress management, particularly on meeting-heavy days.",
-            topInsight: "Running 3+ times per week correlates with a 23% higher focus score and 31% lower stress.",
-            overallScore: 7.1,
+            executiveSummary: "February has been a month of steady growth. Your composite score climbed from 3.6 (Week 1) to 4.1 (Week 4), driven by more consistent exercise and better sleep. The biggest opportunity is staying calm on meeting-heavy days.",
+            topInsight: "Running 3+ times per week lines up with a 23% higher focus score and steadier calm.",
+            overallScore: 4.1,
             isGenerated: true,
             generatedAt: Date()
         )

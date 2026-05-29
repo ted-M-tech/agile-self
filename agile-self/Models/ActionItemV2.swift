@@ -122,16 +122,19 @@ final class ActionItemV2 {
 
     // MARK: - Computed Properties
 
-    /// Returns true if the action has an unmet deadline in the past.
+    /// Returns true if the deadline moment has passed (time-based).
     var isOverdue: Bool {
         guard let deadline = deadline, !isCompleted else { return false }
         return deadline < Date()
     }
 
-    /// Number of calendar days until the deadline. Negative if overdue. Nil if no deadline.
+    /// Whole calendar days until the deadline, measured day-to-day (not by elapsed hours) so a
+    /// deadline of tomorrow reads "1" all of today instead of "0". This drives the row's
+    /// Today/Tomorrow/Nd-overdue badge. Negative if overdue.
     var daysUntilDeadline: Int? {
         guard let deadline = deadline else { return nil }
-        return Calendar.current.dateComponents([.day], from: Date(), to: deadline).day
+        let cal = Calendar.current
+        return cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: deadline)).day
     }
 
     // MARK: - Methods

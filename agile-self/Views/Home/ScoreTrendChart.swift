@@ -11,15 +11,28 @@ import Charts
 struct ScoreTrendChart: View {
     let checkIns: [DailyCheckIn]
 
-    private var todayScore: Double? {
+    /// The latest plotted check-in is not guaranteed to be today's (the window can end on an
+    /// earlier day). Only call it "Today" when it actually is.
+    private var latestIsToday: Bool {
+        guard let last = checkIns.last?.date else { return false }
+        return Calendar.current.isDateInToday(last)
+    }
+
+    private var latestScore: Double? {
         checkIns.last?.compositeScore
     }
 
+    /// Movement between the two most recent entries — only meaningful as a day-over-day delta
+    /// when the latest entry is today AND the two are consecutive calendar days.
     private var scoreDelta: Double? {
-        guard checkIns.count >= 2 else { return nil }
-        let today = checkIns[checkIns.count - 1].compositeScore
-        let yesterday = checkIns[checkIns.count - 2].compositeScore
-        return today - yesterday
+        guard latestIsToday, checkIns.count >= 2 else { return nil }
+        let last = checkIns[checkIns.count - 1]
+        let prev = checkIns[checkIns.count - 2]
+        guard let gap = Calendar.current.dateComponents([.day],
+                                                         from: Calendar.current.startOfDay(for: prev.date),
+                                                         to: Calendar.current.startOfDay(for: last.date)).day,
+              gap == 1 else { return nil }
+        return last.compositeScore - prev.compositeScore
     }
 
     var body: some View {
@@ -49,9 +62,9 @@ struct ScoreTrendChart: View {
 
             Spacer()
 
-            if let score = todayScore {
+            if let score = latestScore {
                 HStack(spacing: Theme.Spacing.xs) {
-                    Text("Today: \(String(format: "%.1f", score))")
+                    Text("\(latestIsToday ? "Today" : "Latest"): \(String(format: "%.1f", score))")
                         .font(Theme.Typography.scoreSmall)
                         .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -150,8 +163,9 @@ struct ScoreTrendChart: View {
         .accessibilityElement()
         .accessibilityLabel("7-day composite score trend")
         .accessibilityValue(
-            todayScore.map { String(format: "Today %.1f out of 5 across %d days.", $0, checkIns.count) }
-                ?? "No data yet."
+            latestScore.map {
+                String(format: "%@ %.1f out of 5 across %d days.", latestIsToday ? "Today" : "Latest", $0, checkIns.count)
+            } ?? "No data yet."
         )
     }
 

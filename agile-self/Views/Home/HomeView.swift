@@ -521,8 +521,10 @@ struct HomeView: View {
         .buttonStyle(.plain)
         .scaleEffect(ctaPulse ? 1.02 : 1.0)
         .onAppear {
+            // withMotionAnimation skips the perpetual pulse under Reduce Motion (the button
+            // just sits at its resting scale) while still animating for everyone else.
             if shouldShowCTAPulse {
-                withAnimation(Theme.Animation.ctaPulse) {
+                withMotionAnimation(Theme.Animation.ctaPulse) {
                     ctaPulse = true
                 }
             }

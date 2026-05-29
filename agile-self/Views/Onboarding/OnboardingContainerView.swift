@@ -74,7 +74,9 @@ struct OnboardingContainerView: View {
     /// only relying on the swipe gesture.
     @ViewBuilder
     private var backButton: some View {
-        if currentPage != .welcome {
+        // Hidden during an in-flight permission request so a Back tap can't be overridden by the
+        // request Task forcing currentPage forward.
+        if currentPage != .welcome && !isRequestingPermissions {
             Button {
                 nameFieldFocused = false
                 withAnimation(Theme.Animation.smooth) {
@@ -485,6 +487,11 @@ struct OnboardingContainerView: View {
         .padding(.vertical, Theme.Spacing.md)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title). \(description)")
+        // Expose the on/off state to VoiceOver and let activation flip it (the combined element
+        // otherwise swallows the inner Toggle's value + action).
+        .accessibilityValue(isOn.wrappedValue ? "On" : "Off")
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityAction { isOn.wrappedValue.toggle() }
     }
 
     // MARK: - Screen 5: Ready
@@ -520,8 +527,13 @@ struct OnboardingContainerView: View {
             }
             .frame(width: 160, height: 160)
             .onAppear {
-                withAnimation(Theme.Animation.ctaPulse) {
+                // Honor Reduce Motion: apply the final state without the perpetual pulse.
+                if UIAccessibility.isReduceMotionEnabled {
                     sparklePhase = true
+                } else {
+                    withAnimation(Theme.Animation.ctaPulse) {
+                        sparklePhase = true
+                    }
                 }
             }
 

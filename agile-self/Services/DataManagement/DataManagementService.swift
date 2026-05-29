@@ -56,6 +56,9 @@ final class DataManagementService {
         // Reset the streak counters to zero (a fresh Streak) but keep the profile intact.
         context.insert(Streak())
         try? context.save()
+
+        // Refresh the home-screen widget so it doesn't keep showing deleted scores/streak.
+        WidgetSnapshotWriter.update(context: context)
     }
 
     private func deleteAll<T: PersistentModel>(_ type: T.Type, context: ModelContext) {

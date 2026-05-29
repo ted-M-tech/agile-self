@@ -62,8 +62,8 @@ struct PatternCard: View {
             )
 
             PatternCard(
-                title: "Sleep affects stress",
-                description: "Sleep quality below 7h correlates with higher stress the next day."
+                title: "Sleep affects calm",
+                description: "Sleep below 7h tends to line up with lower calm the next day."
             )
 
             PatternCard(
