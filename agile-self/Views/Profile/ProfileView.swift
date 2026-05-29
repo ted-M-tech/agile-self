@@ -155,7 +155,7 @@ struct ProfileView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.lg)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(viewModel.profile?.displayName ?? "User"), \(viewModel.profile?.subscriptionTier.rawValue ?? "free") plan")
+        .accessibilityLabel("\(viewModel.profile?.displayName ?? "User"), \((viewModel.profile?.subscriptionTier ?? .free) == .premium ? "Premium" : "Free") plan")
     }
 
     // MARK: - Streak Section
@@ -164,7 +164,10 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             sectionHeader(title: "STREAK")
 
-            HStack(spacing: Theme.Spacing.sm) {
+            // `fixedSize(vertical:)` lets the HStack take the taller column's height; both
+            // sides then expand to it via maxHeight, so the single "Current" card and the
+            // stacked mini-stats column always match (no uneven trailing whitespace).
+            HStack(alignment: .top, spacing: Theme.Spacing.sm) {
                 // Current streak (emphasized)
                 VStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: "flame.fill")
@@ -179,7 +182,7 @@ struct ProfileView: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.vertical, Theme.Spacing.lg)
                 .background(Theme.Colors.backgroundSecondary)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
@@ -198,6 +201,7 @@ struct ProfileView: View {
                         icon: "trophy.fill",
                         color: Theme.Dimension.energy
                     )
+                    .frame(maxHeight: .infinity)
 
                     streakMiniStat(
                         value: "\(viewModel.streak?.totalCheckIns ?? 0)",
@@ -205,8 +209,11 @@ struct ProfileView: View {
                         icon: "checkmark.circle.fill",
                         color: Theme.Colors.success
                     )
+                    .frame(maxHeight: .infinity)
                 }
+                .frame(maxWidth: .infinity)
             }
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -252,20 +259,19 @@ struct ProfileView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(viewModel.activeActions, id: \.id) { action in
-                        ActionRow(action: action) {
-                            withAnimation(Theme.Animation.smooth) {
-                                viewModel.toggleAction(action)
-                            }
-                        }
-                        .contextMenu {
-                            Button(role: .destructive) {
+                        ActionRow(
+                            action: action,
+                            onToggle: {
+                                withAnimation(Theme.Animation.smooth) {
+                                    viewModel.toggleAction(action, context: modelContext)
+                                }
+                            },
+                            onDelete: {
                                 withAnimation(Theme.Animation.smooth) {
                                     viewModel.deleteAction(action, context: modelContext)
                                 }
-                            } label: {
-                                Label("Delete", systemImage: "trash")
                             }
-                        }
+                        )
 
                         if action.id != viewModel.activeActions.last?.id {
                             Divider()
@@ -327,20 +333,19 @@ struct ProfileView: View {
             if showCompletedActions && !viewModel.completedActions.isEmpty {
                 VStack(spacing: 0) {
                     ForEach(viewModel.completedActions, id: \.id) { action in
-                        ActionRow(action: action) {
-                            withAnimation(Theme.Animation.smooth) {
-                                viewModel.toggleAction(action)
-                            }
-                        }
-                        .contextMenu {
-                            Button(role: .destructive) {
+                        ActionRow(
+                            action: action,
+                            onToggle: {
+                                withAnimation(Theme.Animation.smooth) {
+                                    viewModel.toggleAction(action, context: modelContext)
+                                }
+                            },
+                            onDelete: {
                                 withAnimation(Theme.Animation.smooth) {
                                     viewModel.deleteAction(action, context: modelContext)
                                 }
-                            } label: {
-                                Label("Delete", systemImage: "trash")
                             }
-                        }
+                        )
 
                         if action.id != viewModel.completedActions.last?.id {
                             Divider()

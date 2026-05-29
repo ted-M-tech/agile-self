@@ -119,7 +119,7 @@ final class AgileSelfM2FlowUITests: XCTestCase {
         XCTAssertTrue(populated.waitForExistence(timeout: 12), "Home did not show populated Today's score summary")
     }
 
-    // MARK: - Actions: add then delete (long-press context menu)
+    // MARK: - Actions: add then delete (visible row menu)
 
     func testAddAndDeleteAction() {
         let app = launch(["UITEST_ONBOARDED"])
@@ -143,10 +143,13 @@ final class AgileSelfM2FlowUITests: XCTestCase {
         let row = app.staticTexts["Test action XYZ"]
         XCTAssertTrue(row.waitForExistence(timeout: 5), "Added action row missing")
 
-        // Delete is a long-press context menu (NOT swipe).
-        row.press(forDuration: 1.2)
+        // Delete via the row's visible "more options" (ellipsis) menu — a discoverable
+        // affordance that replaced the old long-press-only context menu.
+        let moreButton = app.buttons["More options for Test action XYZ"]
+        XCTAssertTrue(moreButton.waitForExistence(timeout: 5), "Action more-options menu button missing")
+        moreButton.tap()
         let deleteItem = app.buttons["Delete"]
-        XCTAssertTrue(deleteItem.waitForExistence(timeout: 5), "Delete context-menu item missing")
+        XCTAssertTrue(deleteItem.waitForExistence(timeout: 5), "Delete menu item missing")
         deleteItem.tap()
 
         XCTAssertFalse(app.staticTexts["Test action XYZ"].waitForExistence(timeout: 3), "Action was not deleted")

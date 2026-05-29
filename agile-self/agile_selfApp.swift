@@ -111,6 +111,29 @@ struct agile_selfApp: App {
             totalCheckIns: days.count
         ))
 
+        // A small mix of action items (varied priority/source/deadline, plus one completed) so
+        // the Profile actions list renders populated for screenshots.
+        context.insert(ActionItemV2(
+            text: "Protect a 90-minute deep-work block tomorrow",
+            deadline: cal.date(byAdding: .day, value: 2, to: today),
+            priority: .high, source: .aiSuggested
+        ))
+        context.insert(ActionItemV2(
+            text: "Walk 8,000 steps before noon",
+            deadline: cal.date(byAdding: .day, value: 5, to: today),
+            priority: .medium, source: .manual
+        ))
+        context.insert(ActionItemV2(
+            text: "Read 10 pages before bed",
+            priority: .low, source: .manual
+        ))
+        context.insert(ActionItemV2(
+            text: "Go for a morning run",
+            isCompleted: true,
+            completedAt: cal.date(byAdding: .day, value: -1, to: today),
+            priority: .medium, source: .aiSuggested
+        ))
+
         try? context.save()
     }
 

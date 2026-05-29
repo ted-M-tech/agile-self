@@ -18,8 +18,18 @@ struct AddActionView: View {
     @State private var hasDeadline: Bool = false
     @State private var deadline: Date = Date()
 
+    /// Cap action text so a single action stays a short, actionable line (and the row never
+    /// has to render an essay).
+    private let maxLength = 120
+
     private var isValid: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed.count <= maxLength
+    }
+
+    /// Earliest selectable deadline — today (a deadline already in the past makes no sense).
+    private var earliestDeadline: Date {
+        Calendar.current.startOfDay(for: Date())
     }
 
     var body: some View {
@@ -67,6 +77,18 @@ struct AddActionView: View {
                 .background(Theme.Colors.backgroundSecondary)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
                 .accessibilityLabel("Action text")
+                .onChange(of: text) { _, newValue in
+                    if newValue.count > maxLength {
+                        text = String(newValue.prefix(maxLength))
+                    }
+                }
+
+            // Character counter — turns warning-colored as the user nears the cap.
+            Text("\(text.count)/\(maxLength)")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(text.count >= maxLength ? Theme.Colors.warning : Theme.Colors.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .accessibilityHidden(true)
         }
     }
 
@@ -100,6 +122,7 @@ struct AddActionView: View {
                 DatePicker(
                     "Deadline",
                     selection: $deadline,
+                    in: earliestDeadline...,
                     displayedComponents: [.date]
                 )
                 .datePickerStyle(.graphical)

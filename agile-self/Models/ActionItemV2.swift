@@ -47,7 +47,9 @@ enum ActionPriority: String, Codable, CaseIterable, Sendable {
         switch self {
         case .high: return Theme.Colors.error
         case .medium: return Theme.Colors.warning
-        case .low: return Theme.Colors.textSecondary
+        // Sky blue reads as a calm "low" and is actually visible as a pill — the previous
+        // textSecondary grey was near-invisible against the dark card.
+        case .low: return Theme.Dimension.focus
         }
     }
 

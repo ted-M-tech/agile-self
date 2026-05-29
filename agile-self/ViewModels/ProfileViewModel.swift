@@ -89,8 +89,16 @@ final class ProfileViewModel {
 
     // MARK: - Actions
 
-    func toggleAction(_ action: ActionItemV2) {
+    /// Toggles completion and persists it. Without an explicit save the change relied on
+    /// implicit autosave and could be lost; this also refreshes the active/completed split.
+    func toggleAction(_ action: ActionItemV2, context: ModelContext) {
         action.toggleCompletion()
+        do {
+            try context.save()
+            reloadActions(context: context)
+        } catch {
+            errorMessage = "Unable to update the action. Please try again."
+        }
     }
 
     /// Creates a new manual action item and persists it, then refreshes the list.
