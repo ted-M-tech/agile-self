@@ -74,6 +74,16 @@ final class AppContainer {
         (aiService as? AIServiceRouter)?.updateCloudAIPreference(from: context)
     }
 
+    private var _reflectionService: ReflectionService?
+    /// On-device AI for the post-check-in reflection chat (follow-up question + one-line
+    /// summary). Self-contained; uses Foundation Models when available, templates otherwise.
+    var reflectionService: ReflectionService {
+        if let existing = _reflectionService { return existing }
+        let service = ReflectionService()
+        _reflectionService = service
+        return service
+    }
+
     private var _streakService: StreakService?
     var streakService: StreakService {
         if let existing = _streakService { return existing }

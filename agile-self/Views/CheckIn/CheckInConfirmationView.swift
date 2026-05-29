@@ -15,7 +15,6 @@ struct CheckInConfirmationView: View {
     let focusScore: Int
     let stressScore: Int
     let growthScore: Int
-    let elapsedSeconds: Int
     let previousComposite: Double?
     /// Bound so the overlay re-renders when the async daily-insight task completes
     /// (starts nil, updated in place by the save path).
@@ -55,12 +54,6 @@ struct CheckInConfirmationView: View {
         }
     }
 
-    /// Face glyph for a single axis value (1…5).
-    private func face(for value: Int) -> String {
-        let faces = ["\u{1F623}", "\u{1F641}", "\u{1F610}", "\u{1F642}", "\u{1F604}"]
-        return faces[min(max(value, 1), 5) - 1]
-    }
-
     private var delta: Double? {
         guard let previous = previousComposite else { return nil }
         return compositeScore - previous
@@ -86,13 +79,6 @@ struct CheckInConfirmationView: View {
                     checkmarkCircle
                 }
                 .frame(height: 120)
-
-                // Logged time
-                Text("Logged in \(elapsedSeconds)s")
-                    .font(Theme.Typography.callout)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .opacity(showContent ? 1 : 0)
-                    .offset(y: showContent ? 0 : 10)
 
                 // Composite score
                 compositeScoreDisplay
@@ -232,8 +218,9 @@ struct CheckInConfirmationView: View {
             ForEach(DimensionType.allCases) { dimension in
                 let value = scoreFor(dimension)
                 VStack(spacing: Theme.Spacing.xs) {
-                    Text(face(for: value))
-                        .font(.system(size: 18))
+                    FaceGlyph(level: value)
+                        .foregroundStyle(Theme.Dimension.color(for: dimension))
+                        .frame(width: 18, height: 18)
 
                     Image(systemName: dimension.icon)
                         .font(.caption2)
@@ -383,7 +370,6 @@ private struct CheckmarkShape: Shape {
         focusScore: 4,
         stressScore: 2,
         growthScore: 5,
-        elapsedSeconds: 12,
         previousComposite: 3.5,
         insight: .constant("Strong day. You're moving in a good direction — keep the rhythm."),
         onDismiss: {}
@@ -397,7 +383,6 @@ private struct CheckmarkShape: Shape {
         focusScore: 3,
         stressScore: 3,
         growthScore: 3,
-        elapsedSeconds: 28,
         previousComposite: nil,
         insight: .constant(nil),
         onDismiss: {}

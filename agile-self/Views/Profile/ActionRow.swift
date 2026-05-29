@@ -141,9 +141,9 @@ struct ActionRow: View {
 
         VStack(spacing: 0) {
             ForEach(MockData.actionItems, id: \.id) { action in
-                ActionRow(action: action) {
+                ActionRow(action: action, onToggle: {
                     action.toggleCompletion()
-                }
+                })
                 Divider()
                     .overlay(Theme.Colors.divider)
             }

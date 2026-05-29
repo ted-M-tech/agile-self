@@ -14,7 +14,6 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
 
-    let onShowSettings: () -> Void
     let onLogCheckIn: () -> Void
     /// Changes whenever the check-in cover dismisses; triggers a reload so a just-saved
     /// check-in is reflected immediately (CTA → "Today's score", rings, trend).
@@ -94,15 +93,10 @@ struct HomeView: View {
                 viewModel.loadData(context: modelContext)
                 await viewModel.loadHealthData(context: modelContext)
             }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: onShowSettings) {
-                        Image(systemName: "gearshape")
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
-                }
-            }
-            .toolbarBackground(.hidden, for: .navigationBar)
+            // Settings now lives in the Profile tab (Apple-style: prefs/account under Profile),
+            // so Home has no nav-bar items — hide the bar entirely to reclaim the prime top
+            // space for the greeting/score hero instead of a near-empty navigation bar.
+            .toolbar(.hidden, for: .navigationBar)
             .task {
                 viewModel.configure(
                     healthKitService: appContainer.healthKitService,
@@ -537,7 +531,7 @@ struct HomeView: View {
 // MARK: - Preview
 
 #Preview {
-    HomeView(onShowSettings: {}, onLogCheckIn: {})
+    HomeView(onLogCheckIn: {})
         .modelContainer(MockData.previewContainer)
         .environment(AppContainer(modelContainer: MockData.previewContainer))
         .preferredColorScheme(.dark)

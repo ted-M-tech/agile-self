@@ -40,7 +40,6 @@ struct MainTabView: View {
     @Binding var openCheckInOnAppear: Bool
 
     @State private var selectedTab: AppTab = .home
-    @State private var showSettings = false
     @State private var showCheckIn = false
     @State private var showMonthlyReport = false
     /// Bumped when the check-in cover dismisses so Home reloads (a full-screen cover does not
@@ -55,7 +54,6 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             Tab(AppTab.home.title, systemImage: AppTab.home.icon, value: .home) {
                 HomeView(
-                    onShowSettings: { showSettings = true },
                     onLogCheckIn: { showCheckIn = true },
                     refreshToken: homeRefreshToken
                 )
@@ -83,9 +81,6 @@ struct MainTabView: View {
                 selectedTab = .home
                 showCheckIn = true
             }
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
         }
         .fullScreenCover(isPresented: $showCheckIn, onDismiss: { homeRefreshToken += 1 }) {
             DailyCheckInView()
