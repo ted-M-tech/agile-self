@@ -14,26 +14,18 @@ struct ScoreDimensionPicker: View {
     let dimension: DimensionType
     @Binding var score: Int
 
-    /// Face glyphs for levels 1…5 (sad → happy). Index 0 = level 1.
-    private static let faces = ["\u{1F623}", "\u{1F641}", "\u{1F610}", "\u{1F642}", "\u{1F604}"]
-    /// Generic quality ladder shown under the row for the selected level.
+    /// Generic quality ladder used for the per-face accessibility label.
     private static let levelWords = ["Very low", "Low", "Okay", "Good", "Great"]
 
     private let range = 1...5
     private let feedbackGenerator = UIImpactFeedbackGenerator(style: .light)
 
-    private var selectedWord: String {
-        let index = min(max(score, 1), 5) - 1
-        return Self.levelWords[index]
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             header
             faceRow
-            selectedLabel
         }
-        .padding(Theme.Spacing.md)
+        .padding(Theme.Spacing.sm)
         .background(
             RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
                 .fill(Theme.Dimension.background(for: dimension))
@@ -90,10 +82,11 @@ struct ScoreDimensionPicker: View {
         return Button {
             updateScore(value)
         } label: {
-            Text(Self.faces[value - 1])
-                .font(.system(size: 30))
+            FaceGlyph(level: value)
+                .foregroundStyle(isSelected ? color : Theme.Colors.textSecondary)
+                .frame(width: 28, height: 28)
                 .frame(maxWidth: .infinity)
-                .frame(height: 52)
+                .frame(height: 46)
                 .background(
                     RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                         .fill(isSelected ? color.opacity(0.22) : Theme.Colors.backgroundTertiary)
@@ -109,20 +102,6 @@ struct ScoreDimensionPicker: View {
         .buttonStyle(.plain)
         .accessibilityLabel("\(dimension.label): \(Self.levelWords[value - 1]), \(value) of 5")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-    }
-
-    // MARK: - Selected Label
-
-    private var selectedLabel: some View {
-        HStack {
-            Spacer()
-            Text(selectedWord)
-                .font(Theme.Typography.caption)
-                .fontWeight(.medium)
-                .foregroundStyle(Theme.Dimension.color(for: dimension))
-                .contentTransition(.numericText())
-            Spacer()
-        }
     }
 
     // MARK: - Actions

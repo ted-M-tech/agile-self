@@ -40,8 +40,6 @@ struct ScoreTrendChart: View {
             header
             if checkIns.isEmpty {
                 emptyState
-            } else if checkIns.count == 1 {
-                singlePointChart
             } else {
                 chart
             }
@@ -102,64 +100,59 @@ struct ScoreTrendChart: View {
 
     // MARK: - Chart
 
-    private var dates: [Date] { checkIns.map(\.date) }
-
     private var chart: some View {
         // Marks are drawn unconditionally (no entrance-animation gate) so the trend is never
         // blank for Reduce Motion / VoiceOver users.
         Chart(checkIns, id: \.id) { checkIn in
-            AreaMark(
-                x: .value("Day", checkIn.date, unit: .day),
-                y: .value("Score", checkIn.compositeScore)
-            )
-            .foregroundStyle(
-                LinearGradient(
-                    colors: [
-                        Theme.Colors.accentStart.opacity(0.3),
-                        Theme.Colors.accentStart.opacity(0.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .interpolationMethod(.catmullRom)
-
+            // Straight line + circle markers, no area fill — identical style to the Insights
+            // chart and Apple Health's measurement line charts.
             LineMark(
-                x: .value("Day", checkIn.date, unit: .day),
+                x: .value("Day", checkIn.date),
                 y: .value("Score", checkIn.compositeScore)
             )
             .foregroundStyle(Theme.Colors.accentStart)
-            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
-            .interpolationMethod(.catmullRom)
+            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            .interpolationMethod(.linear)
 
-            // Always-visible point at every check-in so a sparse line still
-            // shows where the data is; the final point is emphasized.
             PointMark(
-                x: .value("Day", checkIn.date, unit: .day),
+                x: .value("Day", checkIn.date),
                 y: .value("Score", checkIn.compositeScore)
             )
-            .foregroundStyle(
-                checkIn.id == checkIns.last?.id
-                    ? Theme.Colors.accentEnd
-                    : Theme.Colors.accentStart
-            )
-            .symbolSize(checkIn.id == checkIns.last?.id ? 40 : 18)
+            .foregroundStyle(Theme.Colors.accentStart)
+            .symbolSize(40)
+            .symbol(.circle)
         }
-        .chartXScale(domain: ChartAxis.dateDomain(for: dates))
+        // Apple Health line-chart grid (shared with Insights): leading-anchored 7-day window,
+        // a weekday label at every column start, faint solid gridlines, Y axis on the right.
+        .chartXScale(domain: ChartAxis.leadingDomain(spanDays: 7))
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: ChartAxis.dayStride(for: dates, desiredCount: 7))) { value in
+            AxisMarks(values: ChartAxis.dayLabelDates(spanDays: 7)) { value in
+                AxisGridLine()
+                    .foregroundStyle(Theme.Colors.divider.opacity(0.5))
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
-                        Text(date.formatted(.dateTime.weekday(.narrow)))
+                        Text(date.formatted(.dateTime.weekday(.abbreviated)))
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.textTertiary)
                     }
                 }
             }
         }
-        .chartYAxis(.hidden)
+        .chartYAxis {
+            AxisMarks(position: .trailing, values: [1, 2, 3, 4, 5]) { value in
+                AxisGridLine()
+                    .foregroundStyle(Theme.Colors.divider.opacity(0.7))
+                AxisValueLabel {
+                    if let intValue = value.as(Int.self) {
+                        Text("\(intValue)")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
+                }
+            }
+        }
         .chartYScale(domain: 1...5)
-        .frame(height: 120)
+        .frame(height: 140)
         .accessibilityElement()
         .accessibilityLabel("7-day composite score trend")
         .accessibilityValue(
@@ -167,40 +160,6 @@ struct ScoreTrendChart: View {
                 String(format: "%@ %.1f out of 5 across %d days.", latestIsToday ? "Today" : "Latest", $0, checkIns.count)
             } ?? "No data yet."
         )
-    }
-
-    /// Exactly one check-in: a lone line is invisible, so show the point plus a
-    /// hint instead of an empty-looking axis.
-    private var singlePointChart: some View {
-        VStack(spacing: Theme.Spacing.xs) {
-            Chart(checkIns, id: \.id) { checkIn in
-                PointMark(
-                    x: .value("Day", checkIn.date, unit: .day),
-                    y: .value("Score", checkIn.compositeScore)
-                )
-                .foregroundStyle(Theme.Colors.accentEnd)
-                .symbolSize(60)
-            }
-            .chartXScale(domain: ChartAxis.dateDomain(for: dates))
-            .chartXAxis {
-                AxisMarks(values: dates) { value in
-                    AxisValueLabel {
-                        if let date = value.as(Date.self) {
-                            Text(date.formatted(.dateTime.weekday(.narrow)))
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                        }
-                    }
-                }
-            }
-            .chartYAxis(.hidden)
-            .chartYScale(domain: 1...5)
-            .frame(height: 96)
-
-            Text("Keep checking in to see your trend")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
     }
 
     // MARK: - Helpers

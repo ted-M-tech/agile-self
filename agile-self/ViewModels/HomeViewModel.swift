@@ -172,8 +172,11 @@ final class HomeViewModel {
             }
         } catch {
             // Non-critical: keep the dashboard intact, surface the failure on the card only.
+            // errorNoData is already handled (→ nil) in HealthKitService, so reaching here means
+            // a genuine failure (e.g. database inaccessible) worth logging with its real code.
+            let ns = error as NSError
             healthErrorMessage = "Couldn't read Health data right now. Pull to refresh to try again."
-            AppLog.health.notice("home health fetch failed (non-critical) — dashboard preserved")
+            AppLog.health.error("home health fetch failed: domain=\(ns.domain, privacy: .public) code=\(ns.code, privacy: .public) desc=\(ns.localizedDescription, privacy: .public)")
         }
 
         // ALWAYS build today's connection from the source of truth (SwiftData). This runs even

@@ -46,6 +46,20 @@ struct agile_selfApp: App {
             if isUITest, launchArgs.contains("UITEST_SEED") {
                 Self.seedSampleData(into: container.mainContext)
             }
+            #if DEBUG
+            if !isUITest, launchArgs.contains("SEED_DEMO") {
+                // Demo seeding into the PERSISTENT store: ~30 days of editable check-ins +
+                // correlated health so trends/insights/connections/monthly report populate for a
+                // live demo. Idempotent (skips days that already exist) → preserves today's real
+                // check-in and any manual edits across re-launches. The seed is already in the
+                // current 1–5 calm-oriented scale, so mark RootView's one-time scale migrations
+                // done first — they must not re-flip/re-scale it. Land straight on the dashboard.
+                UserDefaults.standard.set(true, forKey: "didFlipStressToCalm.v1")
+                UserDefaults.standard.set(true, forKey: "didMigrateTo5Point.v1")
+                UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                Self.seedDemoHistory(into: container.mainContext)
+            }
+            #endif
             let app = AppContainer(modelContainer: container)
             self.appContainer = app
             app.refreshCloudAIPreference(context: container.mainContext)
@@ -136,6 +150,85 @@ struct agile_selfApp: App {
 
         try? context.save()
     }
+
+    #if DEBUG
+    /// Seeds ~30 days of plausible, EDITABLE check-ins (+ correlated health) into the PERSISTENT
+    /// store for a live demo. Idempotent: only fills days that have no check-in yet, so today's
+    /// real check-in and any manual edits survive re-launches. DEBUG-only; triggered by the
+    /// `SEED_DEMO` launch argument. Everything seeded is a normal SwiftData row — editable and
+    /// deletable from the app like any other check-in.
+    private static func seedDemoHistory(into context: ModelContext) {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let totalDays = 30
+
+        // Days that already have data are skipped so real/edited rows are never overwritten.
+        let existingCheckInDays = Set(
+            ((try? context.fetch(FetchDescriptor<DailyCheckIn>())) ?? []).map { cal.startOfDay(for: $0.date) }
+        )
+        let existingHealthDays = Set(
+            ((try? context.fetch(FetchDescriptor<HealthSnapshot>())) ?? []).map { cal.startOfDay(for: $0.date) }
+        )
+
+        // Deterministic 1–5 score: a gentle upward trend toward today + believable wobble (no RNG
+        // so it's reproducible). `d` = 0 (oldest) … totalDays-1 (today).
+        let wobble = [0, 1, -1, 0, 1, -1, 1, 0, -1, 1]
+        func score(base: Double, d: Int, phase: Int) -> Int {
+            let progress = Double(d) / Double(max(1, totalDays - 1))
+            let w = Double(wobble[(d + phase) % wobble.count])
+            return max(1, min(5, Int((base + progress * 1.4 + w * 0.8).rounded())))
+        }
+
+        var seeded = 0
+        for i in 0 ..< totalDays {                                   // i = days ago (0 = today)
+            guard let date = cal.date(byAdding: .day, value: -i, to: today) else { continue }
+            let d = (totalDays - 1) - i                              // 0 oldest → rises to today
+
+            let energy = score(base: 2.8, d: d, phase: 0)
+            let focus = score(base: 2.6, d: d, phase: 3)
+            let calm = score(base: 2.9, d: d, phase: 6)              // stored under stressScore
+            let growth = score(base: 2.5, d: d, phase: 1)
+
+            if !existingCheckInDays.contains(date) {
+                context.insert(DailyCheckIn(
+                    date: date, energyScore: energy, focusScore: focus,
+                    stressScore: calm, growthScore: growth, note: nil
+                ))
+                seeded += 1
+            }
+
+            // Correlated health for PAST days only (today's is owned by the live HealthKit fetch).
+            if i >= 1, !existingHealthDays.contains(date) {
+                let w = wobble[(d + 4) % wobble.count]
+                context.insert(HealthSnapshot(
+                    date: date,
+                    sleepMinutes: 300 + focus * 36 + w * 8,          // tracks Focus
+                    steps: 3000 + energy * 1500 + w * 300,           // tracks Energy
+                    activeCalories: 200 + energy * 60,
+                    exerciseMinutes: max(0, growth * 12 + w * 4),    // tracks Growth
+                    restingHeartRate: 74 - calm * 3 + w,             // lower when calmer
+                    runningDistanceMeters: Double(focus * 900 + w * 150)
+                ))
+            }
+        }
+
+        // Reflect the seeded history in the single Streak row (upsert).
+        if let streak = (try? context.fetch(FetchDescriptor<Streak>()))?.first {
+            streak.currentStreak = max(streak.currentStreak, totalDays)
+            streak.longestStreak = max(streak.longestStreak, totalDays)
+            streak.lastCheckInDate = today
+            streak.totalCheckIns = max(streak.totalCheckIns, totalDays)
+        } else {
+            context.insert(Streak(
+                currentStreak: totalDays, longestStreak: totalDays,
+                lastCheckInDate: today, totalCheckIns: totalDays
+            ))
+        }
+
+        try? context.save()
+        print("SEED_DEMO: inserted \(seeded) new check-in day(s) for a ~\(totalDays)-day history.")
+    }
+    #endif
 
     var body: some Scene {
         WindowGroup {

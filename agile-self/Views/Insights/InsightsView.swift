@@ -12,19 +12,30 @@ import Charts
 // MARK: - Time Period
 
 enum TimePeriod: String, CaseIterable {
-    case week = "Week"
-    case month = "Month"
-    case quarter = "Quarter"
-    case year = "Year"
+    case week = "W"
+    case month = "M"
+    case sixMonths = "6M"
+    case year = "Y"
 
     /// Number of days the filtering window spans, inclusive of today.
-    /// `nil` means "all time" (no lower bound).
     var windowDays: Int? {
         switch self {
         case .week: return 7
         case .month: return 30
-        case .quarter: return 90
-        case .year: return nil
+        case .sixMonths: return 180
+        case .year: return 365
+        }
+    }
+
+    /// Inclusive day count for the FIXED chart x-domain (Apple Health style). Unlike
+    /// `windowDays`, `.year` is a concrete 365 so the axis still spans a full, fixed window
+    /// rather than collapsing onto whatever sparse data happens to exist.
+    var spanDays: Int {
+        switch self {
+        case .week: return 7
+        case .month: return 30
+        case .sixMonths: return 180
+        case .year: return 365
         }
     }
 
@@ -160,27 +171,80 @@ struct InsightsView: View {
 
     private var scoreTrendSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            sectionHeader(title: "SCORE TREND", icon: "chart.xyaxis.line")
-
-            // The period control lives inside this card so it clearly scopes to the trend chart
-            // only — Connections, Patterns, and Streak below are all-time by nature.
+            // Apple Health layout: segmented period control on top, then an AVERAGE summary
+            // (big number + inclusive date range), the chart, and finally the dimension toggles.
             periodPicker
 
-            // Main chart (or a hint when there is nothing to plot yet)
-            if filteredCheckIns.count <= 1 {
-                singlePointChart
+            averageSummary
+
+            // Main chart (or a hint when there is nothing to plot yet). The chart always uses a
+            // fixed period grid, so even a single check-in renders correctly in its day column.
+            if filteredCheckIns.isEmpty {
+                trendEmptyHint
             } else {
                 scoreChart
             }
 
-            // Dimension toggles
             dimensionLegend
         }
         .cardStyle()
     }
 
-    /// Dates actually being plotted, for pinning the x-domain / stride.
-    private var chartDates: [Date] { filteredCheckIns.map(\.date) }
+    /// Apple Health-style summary: "AVERAGE / 3.4 avg score / May 23–29, 2026".
+    private var averageSummary: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("AVERAGE")
+                .font(Theme.Typography.caption)
+                .fontWeight(.semibold)
+                .tracking(1.2)
+                .foregroundStyle(Theme.Colors.textTertiary)
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xs) {
+                Text(periodAverageText)
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text("avg score")
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+            }
+            Text(periodRangeText)
+                .font(Theme.Typography.footnote)
+                .foregroundStyle(Theme.Colors.textTertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Average score \(periodAverageText) out of 5. \(periodRangeText).")
+    }
+
+    /// Average composite score across the selected window. "--" when there's nothing to average.
+    private var periodAverageText: String {
+        let scores = filteredCheckIns.map(\.compositeScore)
+        guard !scores.isEmpty else { return "--" }
+        return String(format: "%.1f", scores.reduce(0, +) / Double(scores.count))
+    }
+
+    /// Apple Health-style inclusive date range for the selected window, e.g. "May 23–29, 2026".
+    private var periodRangeText: String {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let start = cal.date(byAdding: .day, value: -(selectedPeriod.spanDays - 1), to: today) ?? today
+        let year = today.formatted(.dateTime.year())
+        if cal.isDate(start, equalTo: today, toGranularity: .month) {
+            // Same month → "May 23–29, 2026"
+            let month = start.formatted(.dateTime.month(.abbreviated))
+            return "\(month) \(start.formatted(.dateTime.day()))–\(today.formatted(.dateTime.day())), \(year)"
+        } else if cal.isDate(start, equalTo: today, toGranularity: .year) {
+            // Same year → "Apr 30 – May 29, 2026"
+            return "\(start.formatted(.dateTime.month(.abbreviated).day())) – \(today.formatted(.dateTime.month(.abbreviated).day())), \(year)"
+        } else {
+            // Cross-year → "Dec 1, 2025 – May 29, 2026"
+            return "\(start.formatted(.dateTime.month(.abbreviated).day().year())) – \(today.formatted(.dateTime.month(.abbreviated).day().year()))"
+        }
+    }
+
+    /// Day-start dates for the x-axis labels (shared helper → week labels every day).
+    private var axisDates: [Date] {
+        ChartAxis.dayLabelDates(spanDays: selectedPeriod.spanDays)
+    }
 
     /// Spoken summary of the trend for VoiceOver (the chart marks themselves aren't readable).
     private var chartAccessibilitySummary: String {
@@ -199,56 +263,46 @@ struct InsightsView: View {
             ForEach(filteredCheckIns, id: \.id) { checkIn in
                 // Marks are drawn unconditionally (no entrance-animation gate) so the chart is
                 // never blank for Reduce Motion / VoiceOver users or on a view reuse.
-                // Area fill under composite line
-                AreaMark(
-                        x: .value("Day", checkIn.date, unit: .day),
-                        y: .value("Score", checkIn.compositeScore)
-                    )
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [
-                                Theme.Colors.accentStart.opacity(0.3),
-                                Theme.Colors.accentStart.opacity(0.0),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .interpolationMethod(.catmullRom)
-
-                    // Main composite line
-                    LineMark(
-                        x: .value("Day", checkIn.date, unit: .day),
+                // Apple Health measurement line charts use STRAIGHT segments (no smoothing) and
+                // NO area fill — just the line plus a circle marker at every reading.
+                LineMark(
+                        x: .value("Day", checkIn.date),
                         y: .value("Score", checkIn.compositeScore)
                     )
                     .foregroundStyle(Theme.Colors.accentStart)
-                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                    .interpolationMethod(.catmullRom)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    .interpolationMethod(.linear)
 
-                    // Always-visible composite point so sparse data is legible.
+                    // Circle marker at every check-in (Apple Health style).
                     PointMark(
-                        x: .value("Day", checkIn.date, unit: .day),
+                        x: .value("Day", checkIn.date),
                         y: .value("Score", checkIn.compositeScore)
                     )
                     .foregroundStyle(Theme.Colors.accentStart)
-                    .symbolSize(18)
+                    .symbolSize(50)
+                    .symbol(.circle)
 
                     // Optional dimension overlays
                     ForEach(Array(activeDimensions), id: \.self) { dimension in
                         LineMark(
-                            x: .value("Day", checkIn.date, unit: .day),
+                            x: .value("Day", checkIn.date),
                             y: .value(dimension.label, Double(checkIn.score(for: dimension))),
                             series: .value("Dimension", dimension.label)
                         )
                         .foregroundStyle(Theme.Dimension.color(for: dimension))
                         .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [5, 3]))
-                        .interpolationMethod(.catmullRom)
+                        .interpolationMethod(.linear)
                     }
             }
         }
-        .chartXScale(domain: ChartAxis.dateDomain(for: chartDates))
+        // Apple Health line-chart grid: domain anchored at the first day's start, so points and
+        // weekday labels sit at column-START gridlines (left-aligned) and the right edge marks now.
+        .chartXScale(domain: ChartAxis.leadingDomain(spanDays: selectedPeriod.spanDays))
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: ChartAxis.dayStride(for: chartDates, desiredCount: 6))) { value in
+            AxisMarks(values: axisDates) { value in
+                // Faint SOLID vertical gridlines at each column start (Apple Health).
+                AxisGridLine()
+                    .foregroundStyle(Theme.Colors.divider.opacity(0.5))
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
                         Text(date.formatted(xAxisFormat))
@@ -259,7 +313,10 @@ struct InsightsView: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading, values: [1, 2, 3, 4, 5]) { value in
+            // Y axis on the trailing edge with subtle solid horizontal gridlines (Apple Health).
+            AxisMarks(position: .trailing, values: [1, 2, 3, 4, 5]) { value in
+                AxisGridLine()
+                    .foregroundStyle(Theme.Colors.divider.opacity(0.7))
                 AxisValueLabel {
                     if let intValue = value.as(Int.self) {
                         Text("\(intValue)")
@@ -267,63 +324,34 @@ struct InsightsView: View {
                             .foregroundStyle(Theme.Colors.textTertiary)
                     }
                 }
-                AxisGridLine()
-                    .foregroundStyle(Theme.Colors.divider)
             }
         }
         .chartYScale(domain: 1...5)
-        .frame(height: 200)
+        .frame(height: 220)
         .accessibilityElement()
         .accessibilityLabel("Composite score trend")
         .accessibilityValue(chartAccessibilitySummary)
     }
 
-    /// 0–1 points: a line/area is invisible. Show the single point (if any) on a
-    /// pinned axis with a hint, instead of a broken-looking empty chart.
-    private var singlePointChart: some View {
+    /// No check-ins in the selected window: a calm hint at the chart's height, instead of a
+    /// broken-looking empty grid. (A single check-in now renders fine in `scoreChart` thanks to
+    /// the fixed period domain, so there is no longer a separate single-point path.)
+    private var trendEmptyHint: some View {
         VStack(spacing: Theme.Spacing.sm) {
-            Chart {
-                ForEach(filteredCheckIns, id: \.id) { checkIn in
-                    PointMark(
-                        x: .value("Day", checkIn.date, unit: .day),
-                        y: .value("Score", checkIn.compositeScore)
-                    )
-                    .foregroundStyle(Theme.Colors.accentStart)
-                    .symbolSize(60)
-                }
-            }
-            .chartXScale(domain: ChartAxis.dateDomain(for: chartDates))
-            .chartXAxis {
-                AxisMarks(values: chartDates) { value in
-                    AxisValueLabel {
-                        if let date = value.as(Date.self) {
-                            Text(date.formatted(xAxisFormat))
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                        }
-                    }
-                }
-            }
-            .chartYAxis {
-                AxisMarks(position: .leading, values: [1, 2, 3, 4, 5]) { value in
-                    AxisValueLabel {
-                        if let intValue = value.as(Int.self) {
-                            Text("\(intValue)")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                        }
-                    }
-                    AxisGridLine()
-                        .foregroundStyle(Theme.Colors.divider)
-                }
-            }
-            .chartYScale(domain: 1...5)
-            .frame(height: 200)
-
-            Text("Keep checking in to see your trend")
-                .font(Theme.Typography.caption)
+            Image(systemName: "chart.xyaxis.line")
+                .font(.title2)
+                .foregroundStyle(Theme.Colors.textTertiary)
+            Text("No check-ins in this period yet")
+                .font(Theme.Typography.subhead)
                 .foregroundStyle(Theme.Colors.textSecondary)
+            Text("Log a check-in to start your trend")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity, minHeight: 200)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No check-ins in this period yet. Log a check-in to start your trend.")
     }
 
     /// Date format adapts to the selected period.
@@ -333,8 +361,8 @@ struct InsightsView: View {
             return .dateTime.weekday(.abbreviated)
         case .month:
             return .dateTime.day()
-        case .quarter, .year:
-            return .dateTime.month(.abbreviated).day()
+        case .sixMonths, .year:
+            return .dateTime.month(.abbreviated)
         }
     }
 

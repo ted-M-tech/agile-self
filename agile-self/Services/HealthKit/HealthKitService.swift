@@ -174,6 +174,14 @@ final class HealthKitService {
                 options: .cumulativeSum
             ) { _, statistics, error in
                 if let error {
+                    // HealthKit reports errorNoData (code 11) when no samples match the
+                    // predicate. That's an EMPTY metric, not a failure — treat it as nil so
+                    // one absent metric (e.g. no Apple Watch → no exercise/heart-rate/sleep
+                    // data) doesn't make the whole snapshot throw and blank ALL health data.
+                    if (error as? HKError)?.code == .errorNoData {
+                        continuation.resume(returning: nil)
+                        return
+                    }
                     continuation.resume(throwing: error)
                     return
                 }
@@ -207,6 +215,14 @@ final class HealthKitService {
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
                 if let error {
+                    // HealthKit reports errorNoData (code 11) when no samples match the
+                    // predicate. That's an EMPTY metric, not a failure — treat it as nil so
+                    // one absent metric (e.g. no Apple Watch → no exercise/heart-rate/sleep
+                    // data) doesn't make the whole snapshot throw and blank ALL health data.
+                    if (error as? HKError)?.code == .errorNoData {
+                        continuation.resume(returning: nil)
+                        return
+                    }
                     continuation.resume(throwing: error)
                     return
                 }
@@ -239,6 +255,14 @@ final class HealthKitService {
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
                 if let error {
+                    // HealthKit reports errorNoData (code 11) when no samples match the
+                    // predicate. That's an EMPTY metric, not a failure — treat it as nil so
+                    // one absent metric (e.g. no Apple Watch → no exercise/heart-rate/sleep
+                    // data) doesn't make the whole snapshot throw and blank ALL health data.
+                    if (error as? HKError)?.code == .errorNoData {
+                        continuation.resume(returning: nil)
+                        return
+                    }
                     continuation.resume(throwing: error)
                     return
                 }

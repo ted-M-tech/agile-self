@@ -71,6 +71,68 @@ enum ChartAxis {
         let spanDays = max(1, (calendar.dateComponents([.day], from: lo, to: hi).day ?? 0))
         return max(1, Int((Double(spanDays) / Double(max(1, desiredCount))).rounded(.up)))
     }
+
+    // MARK: - Fixed (period-anchored) domain — Apple Health style
+
+    /// A FIXED x-domain spanning the whole period and ending today, INDEPENDENT of how many
+    /// points exist. Like Apple Health's weekly/monthly charts: the grid always shows the full
+    /// window, so a lone data point sits in its real day column instead of floating to the edge
+    /// (the "single point looks broken" bug). `spanDays` is the inclusive day count (Week=7,
+    /// Month=30, …). Days are padded ±12h so each day is centered in its column and an edge
+    /// point is never clipped.
+    static func fixedDomain(
+        spanDays: Int,
+        calendar: Calendar = .current,
+        reference: Date = Date()
+    ) -> ClosedRange<Date> {
+        let today = calendar.startOfDay(for: reference)
+        let start = calendar.date(byAdding: .day, value: -(max(1, spanDays) - 1), to: today) ?? today
+        let lo = calendar.date(byAdding: .hour, value: -12, to: start) ?? start
+        let hi = calendar.date(byAdding: .hour, value: 12, to: today) ?? today
+        return lo ... hi
+    }
+
+    /// Day-label stride for a FIXED span (vs `dayStride`, which derives from the data extent).
+    /// Targets `desiredCount` labels across the full window so labels never crowd.
+    static func fixedStride(spanDays: Int, desiredCount: Int = 6) -> Int {
+        max(1, Int((Double(max(1, spanDays)) / Double(max(1, desiredCount))).rounded(.up)))
+    }
+
+    /// Apple Health line-chart domain: anchored at the FIRST day's start (so daily points and
+    /// weekday labels sit at column-START gridlines, left-aligned like Apple Health) with a
+    /// trailing day to today+1 that marks "now" on the right. A small left inset keeps the first
+    /// point's marker from clipping at the edge.
+    static func leadingDomain(
+        spanDays: Int,
+        calendar: Calendar = .current,
+        reference: Date = Date()
+    ) -> ClosedRange<Date> {
+        let today = calendar.startOfDay(for: reference)
+        let firstDay = calendar.date(byAdding: .day, value: -(max(1, spanDays) - 1), to: today) ?? today
+        let lo = calendar.date(byAdding: .hour, value: -6, to: firstDay) ?? firstDay
+        let hi = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        return lo ... hi
+    }
+
+    /// Day-start dates for x-axis labels, anchored at each column start (Apple Health style) and
+    /// thinned so labels never crowd. A week (≤7 days) labels EVERY day (Sat…Fri); longer spans
+    /// are strided toward ~6 labels. Shared by Home and Insights so the axis reads identically.
+    static func dayLabelDates(
+        spanDays: Int,
+        calendar: Calendar = .current,
+        reference: Date = Date()
+    ) -> [Date] {
+        let today = calendar.startOfDay(for: reference)
+        let span = max(1, spanDays)
+        let step = span <= 7 ? 1 : fixedStride(spanDays: span, desiredCount: 6)
+        var dates: [Date] = []
+        var offset = span - 1
+        while offset >= 0 {
+            if let date = calendar.date(byAdding: .day, value: -offset, to: today) { dates.append(date) }
+            offset -= step
+        }
+        return dates
+    }
 }
 
 // MARK: - Single-Point Hint

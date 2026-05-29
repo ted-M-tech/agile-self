@@ -25,16 +25,12 @@ struct DailyCheckInView: View {
     @State private var stressScore = 3
     @State private var growthScore = 3
 
-    // Note
-    @State private var noteText = ""
-    @State private var showNote = false
-
-    // Timer
-    @State private var elapsedSeconds = 0
-    @State private var timerTask: Task<Void, Never>?
-
-    // Confirmation
+    // Reflection (post-save AI chat) → confirmation
+    @State private var showReflection = false
     @State private var showConfirmation = false
+    /// The check-in row persisted by `saveCheckIn`, so the reflection step can attach its
+    /// distilled note and the generated insight to it.
+    @State private var savedCheckIn: DailyCheckIn?
 
     // Saving state
     @State private var isSaving = false
@@ -50,15 +46,12 @@ struct DailyCheckInView: View {
     /// Whether the discard-confirmation dialog is showing.
     @State private var showDiscardDialog = false
 
-    private let noteMaxLength = 280
-
     /// Captures the editable fields so we can tell whether the user changed anything.
     private struct EditorSnapshot: Equatable {
         var energy = 3
         var focus = 3
         var stress = 3
         var growth = 3
-        var note = ""
     }
 
     private var currentSnapshot: EditorSnapshot {
@@ -66,8 +59,7 @@ struct DailyCheckInView: View {
             energy: energyScore,
             focus: focusScore,
             stress: stressScore,
-            growth: growthScore,
-            note: showNote ? noteText : ""
+            growth: growthScore
         )
     }
 
@@ -95,13 +87,23 @@ struct DailyCheckInView: View {
                 saveButton
             }
 
+            // Post-save reflection chat (on-device AI). Captures a "moment worth keeping" and,
+            // when finished/skipped, hands off to the confirmation overlay.
+            if showReflection, let savedCheckIn {
+                ReflectionChatView(
+                    checkIn: savedCheckIn,
+                    reflectionService: appContainer.reflectionService,
+                    onFinish: { note in finishReflection(note: note) }
+                )
+                .transition(.opacity)
+            }
+
             if showConfirmation {
                 CheckInConfirmationView(
                     energyScore: energyScore,
                     focusScore: focusScore,
                     stressScore: stressScore,
                     growthScore: growthScore,
-                    elapsedSeconds: elapsedSeconds,
                     previousComposite: previousComposite,
                     // Bind to the @State so the overlay re-renders the moment the
                     // async insight task completes (it starts nil and updates in place).
@@ -116,10 +118,6 @@ struct DailyCheckInView: View {
         }
         .task {
             loadExistingCheckIn()
-            startTimer()
-        }
-        .onDisappear {
-            timerTask?.cancel()
         }
         .confirmationDialog(
             "Discard this check-in?",
@@ -156,10 +154,6 @@ struct DailyCheckInView: View {
         focusScore = existing.focusScore
         stressScore = existing.stressScore
         growthScore = existing.growthScore
-        if let note = existing.note, !note.isEmpty {
-            noteText = note
-            showNote = true
-        }
         loadedSnapshot = currentSnapshot
     }
 
@@ -190,9 +184,6 @@ struct DailyCheckInView: View {
 
             Spacer()
 
-            // Timer badge
-            timerBadge
-
             // Dismiss button
             Button {
                 handleClose()
@@ -211,24 +202,6 @@ struct DailyCheckInView: View {
         .padding(.bottom, Theme.Spacing.sm)
     }
 
-    private var timerBadge: some View {
-        HStack(spacing: Theme.Spacing.xs) {
-            Image(systemName: "stopwatch")
-                .font(.caption2)
-            Text("\(elapsedSeconds)s")
-                .font(Theme.Typography.caption)
-                .monospacedDigit()
-                .contentTransition(.numericText())
-        }
-        .foregroundStyle(Theme.Colors.textTertiary)
-        .padding(.horizontal, Theme.Spacing.sm)
-        .padding(.vertical, Theme.Spacing.xs)
-        .background(Theme.Colors.backgroundTertiary)
-        .clipShape(Capsule())
-        .padding(.trailing, Theme.Spacing.sm)
-        .accessibilityLabel("Elapsed time \(elapsedSeconds) seconds")
-    }
-
     // MARK: - Scroll Content
 
     private var scrollContent: some View {
@@ -243,71 +216,11 @@ struct DailyCheckInView: View {
                     .transition(.move(edge: .trailing).combined(with: .opacity))
                     .animation(Theme.Animation.springStagger(index: index), value: true)
                 }
-
-                // Note section
-                noteSection
             }
             .padding(.horizontal, Theme.Spacing.lg)
             .padding(.vertical, Theme.Spacing.sm)
         }
         .scrollDismissesKeyboard(.interactively)
-    }
-
-    // MARK: - Note Section
-
-    private var noteSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Button {
-                withAnimation(Theme.Animation.smooth) {
-                    showNote.toggle()
-                }
-            } label: {
-                HStack(spacing: Theme.Spacing.sm) {
-                    Image(systemName: showNote ? "minus.circle" : "plus.circle")
-                        .font(.body)
-                        .foregroundStyle(Theme.Colors.accentStart)
-
-                    Text(showNote ? "Remove note" : "Add a note")
-                        .font(Theme.Typography.callout)
-                        .foregroundStyle(Theme.Colors.accentStart)
-
-                    Spacer()
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint(showNote ? "Collapse the note field" : "Expand to add a note")
-
-            if showNote {
-                VStack(alignment: .trailing, spacing: Theme.Spacing.xs) {
-                    TextEditor(text: $noteText)
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 80, maxHeight: 140)
-                        .padding(Theme.Spacing.sm)
-                        .background(Theme.Colors.backgroundTertiary)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-                        .onChange(of: noteText) { _, newValue in
-                            if newValue.count > noteMaxLength {
-                                noteText = String(newValue.prefix(noteMaxLength))
-                            }
-                        }
-
-                    Text("\(noteText.count)/\(noteMaxLength)")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(
-                            noteText.count > noteMaxLength - 20
-                                ? Theme.Colors.warning
-                                : Theme.Colors.textTertiary
-                        )
-                        .monospacedDigit()
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .padding(Theme.Spacing.md)
-        .background(Theme.Colors.backgroundSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
     }
 
     // MARK: - Save Button
@@ -335,18 +248,6 @@ struct DailyCheckInView: View {
 
     // MARK: - Timer
 
-    private func startTimer() {
-        timerTask = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled else { break }
-                withAnimation(.linear(duration: 0.2)) {
-                    elapsedSeconds += 1
-                }
-            }
-        }
-    }
-
     // MARK: - Score Bindings
 
     private func binding(for dimension: DimensionType) -> Binding<Int> {
@@ -362,14 +263,10 @@ struct DailyCheckInView: View {
 
     private func saveCheckIn() {
         isSaving = true
-        timerTask?.cancel()
 
         let today = Calendar.current.startOfDay(for: Date())
-        let note = showNote && !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? noteText.trimmingCharacters(in: .whitespacesAndNewlines)
-            : nil
 
-        // Upsert: update today's check-in if it exists, otherwise insert. Mirrors
+        // Upsert SCORES only — the reflection step attaches any note afterward. Mirrors
         // WatchConnectivityService.persistCheckIn so the phone and watch never create
         // duplicate rows for the same day (fixes the duplicate check-in bug).
         let descriptor = FetchDescriptor<DailyCheckIn>(predicate: #Predicate { $0.date == today })
@@ -380,7 +277,6 @@ struct DailyCheckInView: View {
             existing.focusScore = focusScore
             existing.stressScore = stressScore
             existing.growthScore = growthScore
-            existing.note = note
             checkIn = existing
         } else {
             let newCheckIn = DailyCheckIn(
@@ -388,51 +284,57 @@ struct DailyCheckInView: View {
                 energyScore: energyScore,
                 focusScore: focusScore,
                 stressScore: stressScore,
-                growthScore: growthScore,
-                note: note
+                growthScore: growthScore
             )
             modelContext.insert(newCheckIn)
             checkIn = newCheckIn
         }
-        AppLog.checkIn.notice("\(existing == nil ? "create" : "upsert", privacy: .public) composite=\(checkIn.compositeScore, privacy: .public) e=\(self.energyScore, privacy: .public) f=\(self.focusScore, privacy: .public) s=\(self.stressScore, privacy: .public) g=\(self.growthScore, privacy: .public) note=\(note != nil, privacy: .public)")
+        AppLog.checkIn.notice("\(existing == nil ? "create" : "upsert", privacy: .public) composite=\(checkIn.compositeScore, privacy: .public) e=\(self.energyScore, privacy: .public) f=\(self.focusScore, privacy: .public) s=\(self.stressScore, privacy: .public) g=\(self.growthScore, privacy: .public)")
 
-        // Persist on-device sentiment of the note (-1.0...1.0) so Insights can
-        // correlate it later. Routed through the DI container's shared on-device
-        // service (a fast, nonisolated NaturalLanguage call) rather than a throwaway
-        // instance. Set to nil when there's no note so an edited check-in clears a
-        // stale score.
-        if let note {
-            checkIn.sentimentScore = appContainer.analyzeSentiment(note)
-        } else {
-            checkIn.sentimentScore = nil
-        }
-
-        // Record check-in for streak tracking
+        // Streak + widget reflect the saved scores immediately.
         appContainer.streakService.recordCheckIn(context: modelContext)
-
-        // Publish the latest state to the home-screen widget via the App Group.
         WidgetSnapshotWriter.update(context: modelContext)
 
-        // Now that the row is persisted, the editor has no unsaved edits — closing the
-        // confirmation must not trigger the discard prompt.
+        // Persisted — no unsaved edits remain (closing must not trigger the discard prompt).
         loadedSnapshot = currentSnapshot
+        savedCheckIn = checkIn
 
-        // Generate the AI insight asynchronously via the injected service. The
-        // confirmation overlay binds to `generatedInsight`, so it shows a graceful
-        // placeholder first and re-renders the moment this completes.
+        // Hand off to the reflection chat. It attaches a distilled note (if any) and then
+        // `finishReflection` runs sentiment + the daily insight and shows the confirmation.
+        withAnimation(Theme.Animation.smooth) {
+            isSaving = false
+            showReflection = true
+        }
+    }
+
+    /// Called when the reflection chat finishes or is skipped. Attaches the distilled note (if
+    /// any), runs on-device sentiment, generates the daily insight, then shows the confirmation.
+    private func finishReflection(note: String?) {
+        if let checkIn = savedCheckIn,
+           let note,
+           !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            checkIn.note = trimmed
+            checkIn.sentimentScore = appContainer.analyzeSentiment(trimmed)
+        }
+
+        // Generate the AI insight asynchronously. The confirmation overlay binds to
+        // `generatedInsight`, showing a graceful placeholder until this completes.
         generatedInsight = nil
-        Task {
-            do {
-                let insight = try await appContainer.aiService.generateDailyInsight(checkIn: checkIn)
-                checkIn.dailyInsight = insight
-                generatedInsight = insight
-            } catch {
-                // AI insight generation failed -- continue without it
+        if let checkIn = savedCheckIn {
+            Task {
+                do {
+                    let insight = try await appContainer.aiService.generateDailyInsight(checkIn: checkIn)
+                    checkIn.dailyInsight = insight
+                    generatedInsight = insight
+                } catch {
+                    // AI insight generation failed -- continue without it
+                }
             }
         }
 
         withAnimation(Theme.Animation.smooth) {
-            isSaving = false
+            showReflection = false
             showConfirmation = true
         }
     }
