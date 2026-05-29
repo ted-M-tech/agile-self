@@ -1,0 +1,18 @@
+# SwiftFormat configuration — Agile Self
+# Run: swiftformat . (install via `brew install swiftformat`).
+
+--swiftversion 5.0
+
+--indent 4
+--maxwidth 140
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen balanced
+--commas inline
+--trimwhitespace always
+--semicolons never
+--self remove
+--importgrouping testable-bottom
+
+--exclude agile-selfTests,agile-selfUITests,agile-self Watch AppTests,agile-self Watch AppUITests,**/*.generated.swift

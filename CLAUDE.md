@@ -23,24 +23,24 @@ Alternatively, open `agile-self.xcodeproj` in Xcode and use Cmd+B to build, Cmd+
 
 - Tagline: "Your AI Growth Partner"
 - Motto: "Turn Reflection Into Action"
-- Platform: iOS 18.1+
+- Platform: iOS 26.1+ (watchOS 26.1+ for the Watch app)
 - Full specification: See SPEC.md
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|------------|
-| Language | Swift 6.0+ |
-| UI | SwiftUI (iOS 18.1+) |
-| Data | SwiftData + CloudKit |
-| Health | HealthKit |
-| Screen Time | DeviceActivity / FamilyControls |
+| Language | Swift 5.0 (SWIFT_APPROACHABLE_CONCURRENCY = YES) |
+| UI | SwiftUI (iOS 26.1+) |
+| Data | SwiftData (CloudKit deferred to M6; `cloudKitDatabase = .none`) |
+| Health | HealthKit (free-account ✅) |
+| Screen Time | DeviceActivity / FamilyControls (deferred — paid/uncertain) |
 | Charts | Swift Charts |
-| AI (on-device) | NaturalLanguage + Foundation Models |
-| AI (cloud) | Gemini 2.0 Flash API |
-| Subscription | StoreKit 2 |
-| Widget | WidgetKit |
-| Min iOS | **18.1** |
+| AI (on-device) | Foundation Models (iOS 26) + NaturalLanguage |
+| AI (cloud) | Gemini API (deferred — behind `allowCloudAI`) |
+| Subscription | StoreKit 2 (local `Subscriptions.storekit` config) |
+| Widget | WidgetKit (App Group `group.tetsuya.agile-self`) |
+| Min iOS | **26.1** |
 
 ## Project Structure
 
@@ -74,17 +74,33 @@ agile-self/
 │   │   ├── InsightsView.swift       # Trends, correlations, patterns, streaks
 │   │   ├── CorrelationCard.swift    # Health-score correlation display
 │   │   └── PatternCard.swift        # AI-discovered pattern card
-│   └── Profile/
-│       ├── ProfileView.swift        # User info, actions, settings
-│       └── ActionRow.swift          # Reusable action item row
+│   ├── Profile/
+│   │   ├── ProfileView.swift        # User info, actions, settings (+ add/delete, sheets)
+│   │   ├── ActionRow.swift          # Reusable action item row
+│   │   └── AddActionView.swift      # New-action modal (M2/D5)
+│   ├── WeeklyReview/                # WeeklyReviewIntroView, WeeklyConversationView, WeeklySummaryView
+│   ├── MonthlyReport/               # MonthlyReportView, HeatmapCalendarView
+│   ├── Onboarding/                  # OnboardingContainerView (permissions + gate)
+│   ├── Settings/                    # SettingsView (export / delete-all)
+│   └── Subscription/                # PaywallView
+├── ViewModels/                      # @Observable VMs: Home, Insights, Profile, MonthlyReport, CheckIn
+├── Services/                        # AppContainer (DI); AI/ (AIServiceRouter, OnDeviceAIService,
+│   │                                #   FoundationModelsAIService + AIGenerableDTOs — M3, GeminiAIService);
+│   │                                #   Analytics, HealthKit, Notifications, ScreenTime, Streak, Subscription,
+│   │                                #   WatchConnectivity, DataManagement (DataManagementService/ExportedDataFile — M2)
+├── Widget/                          # WidgetSnapshot + WidgetSnapshotWriter (M4 app-side → App Group)
 └── Utilities/
     ├── Theme.swift                  # Design system (colors, typography, spacing)
-    └── MockData.swift               # Preview mock data
+    ├── MockData.swift               # Preview-only mock data (#Preview blocks only)
+    └── ShareContentBuilder.swift    # Plain-text share content (M2/D6)
 
-ScreenTimeReport/                    # App Extension
+AgileSelfWidget/                     # WidgetKit extension (M4) — App Group group.tetsuya.agile-self
+agile-self Watch App/                # watchOS companion (WCSession check-in sync)
+ScreenTimeReport/                    # DeviceActivity extension (excluded from build — see M0)
 ├── ScreenTimeReport.swift
 ├── TotalActivityReport.swift
 └── TotalActivityView.swift
+Subscriptions.storekit               # Local StoreKit test config (M2/D7)
 ```
 
 ## Core Framework: Daily / Weekly / Monthly Hybrid
@@ -152,8 +168,14 @@ ScreenTimeReport/                    # App Extension
 - DimensionType enum defined in Theme.swift (shared across models/views)
 
 ### Concurrency
-- Project uses SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
-- Mark nonisolated properties that don't need MainActor
+- Swift 5 language mode with `SWIFT_APPROACHABLE_CONCURRENCY = YES`. There is **no** `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` — types are **nonisolated by default** unless explicitly marked `@MainActor`.
+- `@MainActor` closures stored in `@Observable` classes must be `@ObservationIgnored` (the macro can't synthesize a tracked accessor for a global-actor closure type).
+- SourceKit single-file diagnostics ("cannot find type X" for cross-file symbols, or actor-isolation/await warnings) are frequently FALSE POSITIVES — `xcodebuild` is the source of truth.
+
+### Build / Toolchain
+- All Xcode CLI commands must be prefixed with `DEVELOPER_DIR=/Users/tetsuya/Downloads/Xcode.app/Contents/Developer` unless global `xcode-select` points at full Xcode.
+- New source files auto-compile via `PBXFileSystemSynchronizedRootGroup` — do NOT hand-edit `project.pbxproj` to register files (double-registration corrupts the sync group). Adding a new *target* still requires Xcode GUI.
+- Views that use `.modelContainer(...)` in a `#Preview` need `import SwiftData`.
 
 ### Privacy
 - Local-first data storage
@@ -163,14 +185,16 @@ ScreenTimeReport/                    # App Extension
 ## Xcode Capabilities Required
 
 ### iOS Target (agile-self)
-- HealthKit
-- iCloud (CloudKit)
-- Family Controls
-- Push Notifications
-- App Groups
+- HealthKit (free-account ✅)
+- App Groups `group.tetsuya.agile-self` (free-account ✅ — widget + screen-time data sharing)
+- iCloud (CloudKit) — **deferred to M6** (paid program; `cloudKitDatabase = .none` for now)
+- Family Controls / Push Notifications — **deferred** (paid/uncertain on free account)
+
+### AgileSelfWidgetExtension
+- App Groups `group.tetsuya.agile-self`
 
 ### ScreenTimeReport Extension
-- Family Controls
+- Family Controls (currently excluded from the build — see M0)
 
 ## Testing
 
