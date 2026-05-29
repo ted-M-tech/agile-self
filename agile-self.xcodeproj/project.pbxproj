@@ -86,7 +86,6 @@
 			dstPath = "$(EXTENSIONS_FOLDER_PATH)";
 			dstSubfolderSpec = 16;
 			files = (
-				A71FC1882EDDA39200467EF7 /* ScreenTimeReport.appex in Embed ExtensionKit Extensions */,
 			);
 			name = "Embed ExtensionKit Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -267,7 +266,6 @@
 			);
 			dependencies = (
 				A71FC0102EDCF67F00467EF7 /* PBXTargetDependency */,
-				A71FC1872EDDA39200467EF7 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A71FBFEC2EDCF67D00467EF7 /* agile-self */,
@@ -740,7 +738,7 @@
 				DEVELOPMENT_TEAM = Q7B66QH7YK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "agile-self";
+				INFOPLIST_KEY_CFBundleDisplayName = "Agile Self";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "tetsuya.agile-self";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -773,7 +771,7 @@
 				DEVELOPMENT_TEAM = Q7B66QH7YK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "agile-self";
+				INFOPLIST_KEY_CFBundleDisplayName = "Agile Self";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "tetsuya.agile-self";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -808,7 +806,7 @@
 				DEVELOPMENT_TEAM = Q7B66QH7YK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "agile-self";
+				INFOPLIST_KEY_CFBundleDisplayName = "Agile Self";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Agile Self uses your health data to provide insights about how your sleep and activity patterns relate to your personal growth journey.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Agile Self does not write any data to Apple Health.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -850,7 +848,7 @@
 				DEVELOPMENT_TEAM = Q7B66QH7YK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "agile-self";
+				INFOPLIST_KEY_CFBundleDisplayName = "Agile Self";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Agile Self uses your health data to provide insights about how your sleep and activity patterns relate to your personal growth journey.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Agile Self does not write any data to Apple Health.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

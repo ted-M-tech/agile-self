@@ -314,15 +314,6 @@ struct OnboardingContainerView: View {
                 Divider().overlay(Theme.Colors.divider)
 
                 permissionRow(
-                    icon: "iphone",
-                    title: "Screen Time",
-                    description: "Daily screen usage data",
-                    iconColor: .cyan
-                )
-
-                Divider().overlay(Theme.Colors.divider)
-
-                permissionRow(
                     icon: "bell.fill",
                     title: "Notifications",
                     description: "Daily reminders and insights",
@@ -355,7 +346,6 @@ struct OnboardingContainerView: View {
     }
 
     @State private var healthEnabled = false
-    @State private var screenTimeEnabled = false
     @State private var notificationsEnabled = false
 
     private func permissionRow(
@@ -367,7 +357,6 @@ struct OnboardingContainerView: View {
         let binding: Binding<Bool> = {
             switch title {
             case "Apple Health": return $healthEnabled
-            case "Screen Time": return $screenTimeEnabled
             default: return $notificationsEnabled
             }
         }()

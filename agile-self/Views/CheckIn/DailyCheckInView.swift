@@ -277,17 +277,35 @@ struct DailyCheckInView: View {
         isSaving = true
         timerTask?.cancel()
 
-        let checkIn = DailyCheckIn(
-            energyScore: energyScore,
-            focusScore: focusScore,
-            stressScore: stressScore,
-            growthScore: growthScore,
-            note: showNote && !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? noteText.trimmingCharacters(in: .whitespacesAndNewlines)
-                : nil
-        )
+        let today = Calendar.current.startOfDay(for: Date())
+        let note = showNote && !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+            : nil
 
-        modelContext.insert(checkIn)
+        // Upsert: update today's check-in if it exists, otherwise insert. Mirrors
+        // WatchConnectivityService.persistCheckIn so the phone and watch never create
+        // duplicate rows for the same day (fixes the duplicate check-in bug).
+        let descriptor = FetchDescriptor<DailyCheckIn>(predicate: #Predicate { $0.date == today })
+        let checkIn: DailyCheckIn
+        if let existing = try? modelContext.fetch(descriptor).first {
+            existing.energyScore = energyScore
+            existing.focusScore = focusScore
+            existing.stressScore = stressScore
+            existing.growthScore = growthScore
+            existing.note = note
+            checkIn = existing
+        } else {
+            let newCheckIn = DailyCheckIn(
+                date: today,
+                energyScore: energyScore,
+                focusScore: focusScore,
+                stressScore: stressScore,
+                growthScore: growthScore,
+                note: note
+            )
+            modelContext.insert(newCheckIn)
+            checkIn = newCheckIn
+        }
 
         // Record check-in for streak tracking
         appContainer.streakService.recordCheckIn(context: modelContext)

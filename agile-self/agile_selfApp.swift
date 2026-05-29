@@ -24,10 +24,13 @@ struct agile_selfApp: App {
             Streak.self,
         ])
 
+        // CloudKit is disabled for the free-account device build (no paid Apple
+        // Developer Program → no iCloud container). `.automatic` without an iCloud
+        // entitlement crashes/sync-fails on device. Re-enable in M6 after enrolling.
         let modelConfiguration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false,
-            cloudKitDatabase: .automatic
+            cloudKitDatabase: .none
         )
 
         do {

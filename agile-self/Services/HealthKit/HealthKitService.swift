@@ -20,8 +20,12 @@ final class HealthKitService {
 
     // MARK: - Properties
 
-    /// Whether the user has been prompted for HealthKit authorization.
+    /// Whether at least one HealthKit metric was readable on the most recent fetch.
+    /// HealthKit does not expose read-authorization status, so this is inferred from data.
     var isAuthorized = false
+
+    /// Whether the HealthKit authorization prompt has been requested this session.
+    private(set) var hasRequestedAuthorization = false
 
     /// Whether HealthKit data is available on this device.
     nonisolated var isAvailable: Bool {
@@ -74,7 +78,10 @@ final class HealthKitService {
     func requestAuthorization() async throws {
         guard let healthStore else { return }
         try await healthStore.requestAuthorization(toShare: [], read: readTypes)
-        isAuthorized = true
+        // Requesting only means the prompt was shown — HealthKit does NOT reveal whether
+        // read access was granted. `isAuthorized` is inferred from actual fetch results
+        // instead (see fetchTodaySnapshot).
+        hasRequestedAuthorization = true
     }
 
     // MARK: - Data Fetching
@@ -127,7 +134,7 @@ final class HealthKitService {
         let heartRateValue = try await restingHeartRate
         let distanceValue = try await runningDistance
 
-        return HealthSnapshot(
+        let snapshot = HealthSnapshot(
             date: startOfDay,
             sleepMinutes: sleep,
             steps: stepsValue.map { Int($0) },
@@ -136,6 +143,10 @@ final class HealthKitService {
             restingHeartRate: heartRateValue.map { Int($0) },
             runningDistanceMeters: distanceValue
         )
+        // HealthKit never reports read-authorization status, so infer access from whether
+        // any metric returned data. Denial / no data → isAuthorized stays false, UI degrades.
+        isAuthorized = snapshot.hasAnyMetric
+        return snapshot
     }
 
     // MARK: - Private Helpers

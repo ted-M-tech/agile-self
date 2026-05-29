@@ -106,17 +106,18 @@ final class HomeViewModel {
         do {
             try await healthKitService.requestAuthorization()
 
-            if healthKitService.isAuthorized {
-                let snapshot = try await healthKitService.fetchTodaySnapshot()
+            // Always attempt the fetch — HealthKit doesn't report authorization status,
+            // and a denied/empty fetch degrades gracefully to nil metrics.
+            let snapshot = try await healthKitService.fetchTodaySnapshot()
 
-                // Merge screen time from App Group shared UserDefaults
-                if let screenTimeService {
-                    if let screenMinutes = screenTimeService.fetchTodayScreenTime() {
-                        snapshot.screenTimeMinutes = screenMinutes
-                    }
-                }
+            // Merge screen time from App Group shared UserDefaults (nil on the free tier).
+            if let screenTimeService, let screenMinutes = screenTimeService.fetchTodayScreenTime() {
+                snapshot.screenTimeMinutes = screenMinutes
+            }
 
-                todayHealth = snapshot
+            todayHealth = snapshot
+            // Only persist when there's real data — avoid storing empty snapshots.
+            if snapshot.hasAnyMetric || snapshot.screenTimeMinutes != nil {
                 persistHealthSnapshot(snapshot, context: context)
             }
         } catch {

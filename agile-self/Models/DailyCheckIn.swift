@@ -50,10 +50,12 @@ final class DailyCheckIn {
     ) {
         self.id = id
         self.date = date
-        self.energyScore = energyScore
-        self.focusScore = focusScore
-        self.stressScore = stressScore
-        self.growthScore = growthScore
+        // Clamp to the valid 1-10 range so out-of-range values (sync / import /
+        // future callers) can't break compositeScore, which assumes 1-10.
+        self.energyScore = min(max(energyScore, 1), 10)
+        self.focusScore = min(max(focusScore, 1), 10)
+        self.stressScore = min(max(stressScore, 1), 10)
+        self.growthScore = min(max(growthScore, 1), 10)
         self.note = note
         self.sentimentScore = sentimentScore
         self.dailyInsight = dailyInsight

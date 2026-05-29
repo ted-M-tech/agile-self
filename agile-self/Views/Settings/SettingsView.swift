@@ -31,6 +31,7 @@ struct SettingsView: View {
         let current = UserDefaults.standard.stringArray(forKey: "AppleLanguages")?.first ?? Locale.current.language.languageCode?.identifier ?? "en"
         return current.hasPrefix("ja") ? "ja" : "en"
     }()
+    @State private var showLanguageRestartAlert = false
 
     // MARK: - Constants
 
@@ -88,6 +89,11 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showPrivacySheet) {
                 privacyInfoSheet
+            }
+            .alert("Restart to Apply Language", isPresented: $showLanguageRestartAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("The new language takes effect the next time you open Agile Self.")
             }
         }
         .preferredColorScheme(.dark)
@@ -151,12 +157,11 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                     .tint(Theme.Colors.accentEnd)
                     .onChange(of: selectedLanguage) { _, newValue in
+                        // Persist the preferred language; iOS applies it on next launch.
+                        // Never call exit(0) — force-terminating is an App Store rejection
+                        // risk and reads as a crash. Prompt the user to restart instead.
                         UserDefaults.standard.set([newValue], forKey: "AppleLanguages")
-                        UserDefaults.standard.synchronize()
-                        // Brief delay so the user sees the change, then restart
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            exit(0)
-                        }
+                        showLanguageRestartAlert = true
                     }
                 }
                 .padding(.horizontal, Theme.Spacing.md)

@@ -60,6 +60,14 @@ final class HealthSnapshot {
         self.createdAt = createdAt
     }
 
+    // MARK: - Data Availability
+
+    /// True if at least one HealthKit-sourced metric has a value (screen time excluded).
+    var hasAnyMetric: Bool {
+        sleepMinutes != nil || steps != nil || activeCalories != nil
+            || exerciseMinutes != nil || restingHeartRate != nil || runningDistanceMeters != nil
+    }
+
     // MARK: - Formatted Computed Properties
 
     /// Formatted sleep duration (e.g. "7h 23m"). Returns nil when no data.
@@ -76,12 +84,17 @@ final class HealthSnapshot {
         }
     }
 
+    /// Shared decimal formatter — avoids allocating a NumberFormatter on every redraw.
+    private static let decimalFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter
+    }()
+
     /// Formatted step count with thousands separator (e.g. "8,421"). Returns nil when no data.
     var formattedSteps: String? {
         guard let steps = steps else { return nil }
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        return formatter.string(from: NSNumber(value: steps))
+        return Self.decimalFormatter.string(from: NSNumber(value: steps))
     }
 
     /// Formatted screen time duration (e.g. "3h 12m"). Returns nil when no data.

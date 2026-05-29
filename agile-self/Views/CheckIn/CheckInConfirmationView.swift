@@ -22,6 +22,7 @@ struct CheckInConfirmationView: View {
     @State private var showCheckmark = false
     @State private var showContent = false
     @State private var particles: [Particle] = []
+    @State private var autoDismissTask: Task<Void, Never>?
 
     private var compositeScore: Double {
         let invertedStress = 11 - stressScore
@@ -40,6 +41,7 @@ struct CheckInConfirmationView: View {
                 .opacity(0.92)
                 .ignoresSafeArea()
                 .onTapGesture {
+                    autoDismissTask?.cancel()
                     onDismiss()
                 }
 
@@ -82,6 +84,9 @@ struct CheckInConfirmationView: View {
         .onAppear {
             startAnimations()
             scheduleAutoDismiss()
+        }
+        .onDisappear {
+            autoDismissTask?.cancel()
         }
     }
 
@@ -256,8 +261,9 @@ struct CheckInConfirmationView: View {
     }
 
     private func scheduleAutoDismiss() {
-        Task {
+        autoDismissTask = Task {
             try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
             onDismiss()
         }
     }
