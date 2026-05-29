@@ -75,4 +75,9 @@ final class AIServiceRouter: AIServiceProtocol, @unchecked Sendable {
     ) async throws -> MonthlyReportResult {
         try await onDeviceService.generateMonthlyReport(checkIns: checkIns, health: health)
     }
+
+    /// Patterns are lightweight and run on-device for instant Insights rendering.
+    nonisolated func generatePatterns(from checkIns: [DailyCheckIn]) async throws -> [String] {
+        try await onDeviceService.generatePatterns(from: checkIns)
+    }
 }

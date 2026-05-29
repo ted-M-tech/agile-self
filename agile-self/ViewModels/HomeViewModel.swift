@@ -25,7 +25,7 @@ final class HomeViewModel {
     // MARK: - Services
 
     private var healthKitService: HealthKitService?
-    private var aiService: AIService?
+    private var aiService: (any AIServiceProtocol)?
     private var streakService: StreakService?
     private var screenTimeService: ScreenTimeService?
 
@@ -33,7 +33,7 @@ final class HomeViewModel {
 
     init(
         healthKitService: HealthKitService? = nil,
-        aiService: AIService? = nil,
+        aiService: (any AIServiceProtocol)? = nil,
         streakService: StreakService? = nil,
         screenTimeService: ScreenTimeService? = nil
     ) {
@@ -47,7 +47,7 @@ final class HomeViewModel {
 
     func configure(
         healthKitService: HealthKitService,
-        aiService: AIService,
+        aiService: any AIServiceProtocol,
         streakService: StreakService,
         screenTimeService: ScreenTimeService
     ) {

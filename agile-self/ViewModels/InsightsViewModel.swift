@@ -27,14 +27,14 @@ final class InsightsViewModel {
 
     // MARK: - Services
 
-    private var aiService: AIService?
+    private var aiService: (any AIServiceProtocol)?
     private var streakService: StreakService?
     private var analyticsService: AnalyticsService?
 
     // MARK: - Init
 
     init(
-        aiService: AIService? = nil,
+        aiService: (any AIServiceProtocol)? = nil,
         streakService: StreakService? = nil,
         analyticsService: AnalyticsService? = nil
     ) {
@@ -46,7 +46,7 @@ final class InsightsViewModel {
     // MARK: - Configure Services
 
     func configure(
-        aiService: AIService,
+        aiService: any AIServiceProtocol,
         streakService: StreakService,
         analyticsService: AnalyticsService
     ) {
@@ -58,16 +58,12 @@ final class InsightsViewModel {
     // MARK: - Filtered Check-Ins
 
     var filteredCheckIns: [DailyCheckIn] {
-        switch selectedPeriod {
-        case .week:
-            return Array(allCheckIns.suffix(7))
-        case .month:
-            return Array(allCheckIns.suffix(30))
-        case .quarter:
-            return Array(allCheckIns.suffix(90))
-        case .year:
+        // Filter by calendar date, not by count: missing days must not pull in
+        // older check-ins (suffix(7) on sparse data would reach weeks back).
+        guard let start = selectedPeriod.startDate() else {
             return allCheckIns
         }
+        return allCheckIns.filter { $0.date >= start }
     }
 
     // MARK: - Load Data
@@ -123,6 +119,6 @@ final class InsightsViewModel {
 
     func loadPatterns() async {
         guard let aiService else { return }
-        patterns = await aiService.generatePatterns(from: allCheckIns)
+        patterns = (try? await aiService.generatePatterns(from: allCheckIns)) ?? []
     }
 }

@@ -115,15 +115,34 @@ final class CheckInViewModel {
         let trimmedNote = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
         let note = showNote && !trimmedNote.isEmpty ? trimmedNote : nil
 
-        let checkIn = DailyCheckIn(
-            energyScore: energyScore,
-            focusScore: focusScore,
-            stressScore: stressScore,
-            growthScore: growthScore,
-            note: note
-        )
+        // Upsert: update today's check-in if it exists, otherwise insert. Mirrors
+        // WatchConnectivityService.persistCheckIn and DailyCheckInView.saveCheckIn so
+        // the view model, the phone view, and the watch never create duplicate rows
+        // for the same day (fixes the duplicate check-in bug).
+        let today = Calendar.current.startOfDay(for: Date())
+        let descriptor = FetchDescriptor<DailyCheckIn>(predicate: #Predicate { $0.date == today })
+        let checkIn: DailyCheckIn
+        if let existing = try? context.fetch(descriptor).first {
+            existing.energyScore = energyScore
+            existing.focusScore = focusScore
+            existing.stressScore = stressScore
+            existing.growthScore = growthScore
+            existing.note = note
+            checkIn = existing
+        } else {
+            let newCheckIn = DailyCheckIn(
+                date: today,
+                energyScore: energyScore,
+                focusScore: focusScore,
+                stressScore: stressScore,
+                growthScore: growthScore,
+                note: note
+            )
+            context.insert(newCheckIn)
+            checkIn = newCheckIn
+        }
 
-        // Generate AI insight
+        // Generate AI insight (routed via AIServiceRouter when injected)
         if let aiService {
             do {
                 let insight = try await aiService.generateDailyInsight(checkIn: checkIn)
@@ -132,9 +151,6 @@ final class CheckInViewModel {
                 // AI insight generation failed -- continue without it
             }
         }
-
-        // Persist check-in
-        context.insert(checkIn)
 
         // Update streak
         if let streakService {

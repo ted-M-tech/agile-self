@@ -59,4 +59,8 @@ protocol AIServiceProtocol: Sendable {
         checkIns: [DailyCheckIn],
         health: [HealthSnapshot]
     ) async throws -> MonthlyReportResult
+
+    /// Generates short pattern observations from a set of check-ins.
+    /// Typically runs on-device; returns human-readable insight strings.
+    func generatePatterns(from checkIns: [DailyCheckIn]) async throws -> [String]
 }

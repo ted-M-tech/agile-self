@@ -34,12 +34,24 @@ final class AppContainer {
         return service
     }
 
-    private var _aiService: AIService?
-    var aiService: AIService {
+    private var _aiService: (any AIServiceProtocol)?
+    /// The unified AI service. Backed by `AIServiceRouter`, which composes the
+    /// on-device service (instant, local) and the Gemini cloud service, routing
+    /// by the user's `allowCloudAI` preference.
+    var aiService: any AIServiceProtocol {
         if let existing = _aiService { return existing }
-        let service = AIService()
-        _aiService = service
-        return service
+        let router = AIServiceRouter(
+            onDeviceService: OnDeviceAIService(),
+            geminiService: GeminiAIService()
+        )
+        _aiService = router
+        return router
+    }
+
+    /// Refreshes the router's cloud-AI preference from the persisted UserProfile.
+    /// Call at launch and whenever the user toggles cloud AI in Settings.
+    func refreshCloudAIPreference(context: ModelContext) {
+        (aiService as? AIServiceRouter)?.updateCloudAIPreference(from: context)
     }
 
     private var _streakService: StreakService?

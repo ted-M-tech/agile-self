@@ -14,15 +14,8 @@ struct agile_selfApp: App {
     private let appContainer: AppContainer?
 
     init() {
-        let schema = Schema([
-            DailyCheckIn.self,
-            HealthSnapshot.self,
-            WeeklyReview.self,
-            MonthlyReport.self,
-            ActionItemV2.self,
-            UserProfile.self,
-            Streak.self,
-        ])
+        // Versioned schema (V1) — stable migration foundation. See AppSchema.swift.
+        let schema = Schema(versionedSchema: AppSchemaV1.self)
 
         // CloudKit is disabled for the free-account device build (no paid Apple
         // Developer Program → no iCloud container). `.automatic` without an iCloud
@@ -36,11 +29,13 @@ struct agile_selfApp: App {
         do {
             let container = try ModelContainer(
                 for: schema,
+                migrationPlan: AppMigrationPlan.self,
                 configurations: [modelConfiguration]
             )
             self.sharedModelContainer = container
             let app = AppContainer(modelContainer: container)
             self.appContainer = app
+            app.refreshCloudAIPreference(context: container.mainContext)
             app.watchConnectivityService.activate()
         } catch {
             self.sharedModelContainer = nil

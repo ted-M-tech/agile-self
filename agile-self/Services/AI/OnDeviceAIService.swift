@@ -260,4 +260,32 @@ final class OnDeviceAIService: AIServiceProtocol, @unchecked Sendable {
             correlations: correlations
         )
     }
+
+    nonisolated func generatePatterns(from checkIns: [DailyCheckIn]) async throws -> [String] {
+        guard checkIns.count >= 7 else {
+            return ["Need at least 7 days of data to discover patterns."]
+        }
+
+        var patterns: [String] = []
+
+        let avgEnergy = Double(checkIns.map(\.energyScore).reduce(0, +)) / Double(checkIns.count)
+        let avgFocus = Double(checkIns.map(\.focusScore).reduce(0, +)) / Double(checkIns.count)
+        let avgStress = Double(checkIns.map(\.stressScore).reduce(0, +)) / Double(checkIns.count)
+
+        if avgFocus >= 7.0 {
+            patterns.append("Focus has been consistently strong this period.")
+        }
+        if avgStress >= 6.0 {
+            patterns.append("Stress tends to run high \u{2014} watch for recovery time.")
+        }
+        if avgEnergy <= 5.0 {
+            patterns.append("Energy is on the lower side \u{2014} sleep may be the lever.")
+        }
+
+        if patterns.isEmpty {
+            patterns.append("Your dimensions are well balanced \u{2014} keep the routine steady.")
+        }
+
+        return Array(patterns.prefix(3))
+    }
 }

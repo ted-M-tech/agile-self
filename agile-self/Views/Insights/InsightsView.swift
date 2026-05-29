@@ -16,6 +16,29 @@ enum TimePeriod: String, CaseIterable {
     case month = "Month"
     case quarter = "Quarter"
     case year = "Year"
+
+    /// Number of days the filtering window spans, inclusive of today.
+    /// `nil` means "all time" (no lower bound).
+    var windowDays: Int? {
+        switch self {
+        case .week: return 7
+        case .month: return 30
+        case .quarter: return 90
+        case .year: return nil
+        }
+    }
+
+    /// The inclusive lower-bound date (stripped to midnight) for this period,
+    /// computed relative to `reference`. Check-ins whose `date` is `>= start`
+    /// belong to the window. Returns `nil` for `.year` (no lower bound).
+    func startDate(
+        relativeTo reference: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Date? {
+        guard let days = windowDays else { return nil }
+        let today = calendar.startOfDay(for: reference)
+        return calendar.date(byAdding: .day, value: -(days - 1), to: today)
+    }
 }
 
 // MARK: - Insights View

@@ -115,22 +115,33 @@ final class WatchConnectivityService: NSObject {
     // MARK: - Message Handlers
 
     func handleCheckIn(_ message: [String: Any], replyHandler: (([String: Any]) -> Void)? = nil) {
+        let errorReply: [String: Any] = ["error": true]
+
         guard
             let energy = message["energy"] as? Int,
             let focus = message["focus"] as? Int,
             let stress = message["stress"] as? Int,
             let growth = message["growth"] as? Int
-        else { return }
+        else {
+            // Malformed message: still resolve the Watch reply so it never hangs.
+            replyHandler?(errorReply)
+            return
+        }
 
         let container = modelContainer
 
         Task { @MainActor in
             let context = container.mainContext
-            if let reply = try? self.persistCheckIn(
-                energy: energy, focus: focus, stress: stress, growth: growth,
-                context: context
-            ) {
+            do {
+                let reply = try self.persistCheckIn(
+                    energy: energy, focus: focus, stress: stress, growth: growth,
+                    context: context
+                )
                 replyHandler?(reply)
+            } catch {
+                // Persist/save failure: resolve the reply with an error marker
+                // so the Watch side does not wait indefinitely.
+                replyHandler?(errorReply)
             }
         }
     }

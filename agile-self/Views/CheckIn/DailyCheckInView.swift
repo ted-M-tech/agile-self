@@ -307,14 +307,27 @@ struct DailyCheckInView: View {
             checkIn = newCheckIn
         }
 
+        // Persist on-device sentiment of the note (-1.0...1.0) so Insights can
+        // correlate it later. analyzeSentiment is a fast, nonisolated
+        // NaturalLanguage call. Set to nil when there's no note so an edited
+        // check-in clears a stale score.
+        if let note {
+            checkIn.sentimentScore = OnDeviceAIService().analyzeSentiment(note)
+        } else {
+            checkIn.sentimentScore = nil
+        }
+
         // Record check-in for streak tracking
         appContainer.streakService.recordCheckIn(context: modelContext)
 
         // Generate AI insight asynchronously
         Task {
-            if let insight = await appContainer.aiService.generateDailyInsight(checkIn: checkIn) {
+            do {
+                let insight = try await appContainer.aiService.generateDailyInsight(checkIn: checkIn)
                 checkIn.dailyInsight = insight
                 generatedInsight = insight
+            } catch {
+                // AI insight generation failed -- continue without it
             }
         }
 

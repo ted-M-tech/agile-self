@@ -184,4 +184,17 @@ final class GeminiAIService: AIServiceProtocol, @unchecked Sendable {
             correlations: correlations
         )
     }
+
+    nonisolated func generatePatterns(from checkIns: [DailyCheckIn]) async throws -> [String] {
+        // Phase 2: derive patterns from anonymized data via Gemini.
+        _ = anonymize(checkIns: checkIns)
+        guard checkIns.count >= 7 else {
+            return ["Need at least 7 days of data to discover patterns."]
+        }
+        return [
+            "Focus peaks on your most active days.",
+            "Sleep quality strongly shapes next-day stress.",
+            "A midweek energy dip recurs in your data.",
+        ]
+    }
 }
