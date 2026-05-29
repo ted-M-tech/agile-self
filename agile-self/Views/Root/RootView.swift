@@ -13,6 +13,8 @@ import SwiftData
 struct RootView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppContainer.self) private var appContainer
+    @Environment(\.scenePhase) private var scenePhase
 
     /// One-shot deep-link flag: set true when the user finished onboarding via
     /// "Start First Check-in". MainTabView consumes it once on first appear to open
@@ -36,6 +38,38 @@ struct RootView: View {
         .task {
             ensureDefaultRecords()
             WidgetSnapshotWriter.update(context: modelContext)
+            await refreshHealthHistory()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Re-import whenever the app returns to the foreground. The cold-launch open is
+            // already covered by `.task` above; this catches warm foregrounds (the throttle in
+            // `refreshHealthHistory` keeps rapid re-opens from re-querying HealthKit).
+            if phase == .active {
+                Task { await refreshHealthHistory() }
+            }
+        }
+    }
+
+    /// Imports the user's REAL Apple Health history (sleep, steps, activity, etc.) for the last
+    /// 30 days on every app open, upserting by date so new and late-syncing metrics refresh the
+    /// existing rows — past days get real data to correlate against their check-ins, not just
+    /// "today". Throttled to at most once per 30 minutes so opening the app repeatedly doesn't
+    /// re-query HealthKit needlessly; the throttle timestamp is recorded only after a SUCCESSFUL
+    /// import, so a launch before HealthKit is granted retries on the next open. Skipped before
+    /// onboarding and under UI tests. A manual full re-import lives in Settings → "Import Apple
+    /// Health".
+    private func refreshHealthHistory() async {
+        guard hasCompletedOnboarding else { return }
+        guard !ProcessInfo.processInfo.arguments.contains("UITEST") else { return }
+
+        let key = "lastHealthImportAt"
+        let now = Date().timeIntervalSince1970
+        let last = UserDefaults.standard.double(forKey: key)
+        guard now - last > 30 * 60 else { return }   // at most once / 30 min
+
+        let imported = await appContainer.healthKitService.importRecentHistory(days: 30, context: modelContext)
+        if imported > 0 {
+            UserDefaults.standard.set(now, forKey: key)
         }
     }
 
