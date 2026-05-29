@@ -32,6 +32,7 @@ struct RootView: View {
         .preferredColorScheme(.dark)
         .task {
             ensureDefaultRecords()
+            WidgetSnapshotWriter.update(context: modelContext)
         }
     }
 
@@ -39,16 +40,24 @@ struct RootView: View {
 
     /// Creates a default UserProfile and Streak if none exist yet.
     private func ensureDefaultRecords() {
+        var didInsert = false
+
         let profileDescriptor = FetchDescriptor<UserProfile>()
         if (try? modelContext.fetch(profileDescriptor))?.isEmpty ?? true {
-            let profile = UserProfile()
-            modelContext.insert(profile)
+            modelContext.insert(UserProfile())
+            didInsert = true
         }
 
         let streakDescriptor = FetchDescriptor<Streak>()
         if (try? modelContext.fetch(streakDescriptor))?.isEmpty ?? true {
-            let streak = Streak()
-            modelContext.insert(streak)
+            modelContext.insert(Streak())
+            didInsert = true
+        }
+
+        // Persist immediately so onboarding (which fetches the singleton profile to
+        // write displayName / notification prefs / hasCompletedOnboarding) sees it on disk.
+        if didInsert {
+            try? modelContext.save()
         }
     }
 }

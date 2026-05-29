@@ -320,6 +320,9 @@ struct DailyCheckInView: View {
         // Record check-in for streak tracking
         appContainer.streakService.recordCheckIn(context: modelContext)
 
+        // Publish the latest state to the home-screen widget via the App Group.
+        WidgetSnapshotWriter.update(context: modelContext)
+
         // Generate AI insight asynchronously
         Task {
             do {
