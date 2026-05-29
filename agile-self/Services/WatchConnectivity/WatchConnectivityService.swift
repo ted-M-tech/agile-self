@@ -137,6 +137,9 @@ final class WatchConnectivityService: NSObject {
                     energy: energy, focus: focus, stress: stress, growth: growth,
                     context: context
                 )
+                // Keep the home-screen widget in sync after a Watch-initiated check-in
+                // (the foreground app does this on its own check-ins; the Watch path didn't).
+                WidgetSnapshotWriter.update(context: context)
                 replyHandler?(reply)
             } catch {
                 // Persist/save failure: resolve the reply with an error marker

@@ -26,17 +26,28 @@ struct PaywallView: View {
     @State private var selectedPlan: PlanType = .yearly
     @State private var isPurchasing: Bool = false
     @State private var purchaseError: String?
+    /// Neutral (non-error) status, e.g. a pending purchase or "no purchases to restore".
+    @State private var purchaseInfo: String?
 
     private var subscriptionService: SubscriptionService {
         appContainer.subscriptionService
     }
 
     /// Per-month equivalent of the yearly plan, derived from the real product price.
-    /// Falls back to the JP-locale literal when the product hasn't loaded yet.
+    /// Empty until the product loads — never a hardcoded (possibly wrong-currency) literal.
     private var yearlyMonthlyEquivalent: String {
-        guard let yearly = subscriptionService.yearlyProduct else { return "\u{00A5}317/mo" }
+        guard let yearly = subscriptionService.yearlyProduct else { return "" }
         let perMonth = yearly.price / 12
         return perMonth.formatted(yearly.priceFormatStyle) + "/mo"
+    }
+
+    /// Price placeholder shown before StoreKit products load. A neutral dash avoids showing a
+    /// hardcoded ¥ amount to users in other currencies (the real displayPrice is locale-correct).
+    private static let pricePlaceholder = "\u{2014}"
+
+    /// The StoreKit product backing the selected plan (nil until products load).
+    private var selectedProduct: Product? {
+        selectedPlan == .yearly ? subscriptionService.yearlyProduct : subscriptionService.monthlyProduct
     }
 
     var body: some View {
@@ -51,6 +62,11 @@ struct PaywallView: View {
                         Text(error)
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.error)
+                            .multilineTextAlignment(.center)
+                    } else if let info = purchaseInfo {
+                        Text(info)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.textSecondary)
                             .multilineTextAlignment(.center)
                     }
                     restoreLink
@@ -75,6 +91,12 @@ struct PaywallView: View {
             }
             .task {
                 await subscriptionService.loadProducts()
+            }
+            .onChange(of: subscriptionService.isPremium) { _, isPremium in
+                // Auto-close once entitlement is granted — covers a pending (Ask to Buy / SCA)
+                // purchase that resolves later via the transaction listener, so the user isn't
+                // left staring at a stale "pending approval" message on an open paywall.
+                if isPremium { dismiss() }
             }
         }
         .preferredColorScheme(.dark)
@@ -167,7 +189,7 @@ struct PaywallView: View {
                 pricingCard(
                     plan: .monthly,
                     title: "Monthly",
-                    price: subscriptionService.monthlyProduct?.displayPrice ?? "\u{00A5}480",
+                    price: subscriptionService.monthlyProduct?.displayPrice ?? Self.pricePlaceholder,
                     period: "/month",
                     badge: nil
                 )
@@ -176,7 +198,7 @@ struct PaywallView: View {
                 pricingCard(
                     plan: .yearly,
                     title: "Yearly",
-                    price: subscriptionService.yearlyProduct?.displayPrice ?? "\u{00A5}3,800",
+                    price: subscriptionService.yearlyProduct?.displayPrice ?? Self.pricePlaceholder,
                     period: "/year",
                     badge: "34% OFF"
                 )
@@ -279,7 +301,7 @@ struct PaywallView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(title) plan, \(price) \(period)")
+        .accessibilityLabel(price == Self.pricePlaceholder ? "\(title) plan, price loading" : "\(title) plan, \(price) \(period)")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .accessibilityHint("Double tap to select this plan")
@@ -292,6 +314,7 @@ struct PaywallView: View {
             Task {
                 isPurchasing = true
                 purchaseError = nil
+                purchaseInfo = nil
                 let product: Product? = selectedPlan == .yearly
                     ? subscriptionService.yearlyProduct
                     : subscriptionService.monthlyProduct
@@ -301,9 +324,14 @@ struct PaywallView: View {
                     return
                 }
                 do {
-                    let transaction = try await subscriptionService.purchase(product)
-                    if transaction != nil {
+                    switch try await subscriptionService.purchase(product) {
+                    case .success:
                         dismiss()
+                    case .pending:
+                        // e.g. Ask to Buy / Strong Customer Authentication — not a failure.
+                        purchaseInfo = "Your purchase is pending approval. Premium unlocks automatically once it's approved."
+                    case .cancelled:
+                        break // user backed out; no message
                     }
                 } catch {
                     purchaseError = "Purchase failed. Please try again."
@@ -321,10 +349,10 @@ struct PaywallView: View {
             }
             .primaryButtonStyle()
         }
-        .disabled(isPurchasing)
-        .opacity(isPurchasing ? 0.7 : 1.0)
+        .disabled(isPurchasing || selectedProduct == nil)
+        .opacity((isPurchasing || selectedProduct == nil) ? 0.6 : 1.0)
         .accessibilityLabel("Subscribe to \(selectedPlan == .yearly ? "yearly" : "monthly") plan")
-        .accessibilityHint("Begins the purchase process")
+        .accessibilityHint(selectedProduct == nil ? "Prices are still loading" : "Begins the purchase process")
     }
 
     // MARK: - Restore Link
@@ -332,9 +360,13 @@ struct PaywallView: View {
     private var restoreLink: some View {
         Button {
             Task {
+                purchaseError = nil
+                purchaseInfo = nil
                 await subscriptionService.restorePurchases()
                 if subscriptionService.isPremium {
                     dismiss()
+                } else {
+                    purchaseInfo = "No previous purchases found to restore."
                 }
             }
         } label: {
