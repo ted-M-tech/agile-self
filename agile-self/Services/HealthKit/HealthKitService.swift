@@ -8,6 +8,7 @@
 
 import Foundation
 import HealthKit
+import SwiftData
 import os
 
 /// Provides read-only access to HealthKit data for building daily HealthSnapshot models.
@@ -87,11 +88,12 @@ final class HealthKitService {
 
     // MARK: - Data Fetching
 
-    /// Fetches today's health data and builds a HealthSnapshot.
-    /// Returns a snapshot with nil values for any unavailable metrics.
-    func fetchTodaySnapshot() async throws -> HealthSnapshot {
+    /// Fetches a single day's health data and builds a HealthSnapshot.
+    /// Returns a snapshot with nil values for any unavailable metrics. No side effects — the
+    /// today-fetch / history-import wrappers handle `isAuthorized` and persistence.
+    func fetchSnapshot(for day: Date) async throws -> HealthSnapshot {
         let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
+        let startOfDay = calendar.startOfDay(for: day)
         guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
             return HealthSnapshot(date: startOfDay)
         }
@@ -135,7 +137,7 @@ final class HealthKitService {
         let heartRateValue = try await restingHeartRate
         let distanceValue = try await runningDistance
 
-        let snapshot = HealthSnapshot(
+        return HealthSnapshot(
             date: startOfDay,
             sleepMinutes: sleep,
             steps: stepsValue.map { Int($0) },
@@ -144,11 +146,64 @@ final class HealthKitService {
             restingHeartRate: heartRateValue.map { Int($0) },
             runningDistanceMeters: distanceValue
         )
-        // HealthKit never reports read-authorization status, so infer access from whether
-        // any metric returned data. Denial / no data → isAuthorized stays false, UI degrades.
+    }
+
+    /// Fetches today's health data and builds a HealthSnapshot. Infers read-authorization from
+    /// whether any metric returned (HealthKit never reports it directly).
+    func fetchTodaySnapshot() async throws -> HealthSnapshot {
+        let snapshot = try await fetchSnapshot(for: Date())
         isAuthorized = snapshot.hasAnyMetric
-        AppLog.health.notice("fetch sleep=\(sleep != nil, privacy: .public) steps=\(stepsValue != nil, privacy: .public) cals=\(caloriesValue != nil, privacy: .public) exercise=\(exerciseValue != nil, privacy: .public) hr=\(heartRateValue != nil, privacy: .public) dist=\(distanceValue != nil, privacy: .public) anyMetric=\(snapshot.hasAnyMetric, privacy: .public) (sim/no-data → all false)")
+        AppLog.health.notice("fetch today anyMetric=\(snapshot.hasAnyMetric, privacy: .public) (sim/no-data → false)")
         return snapshot
+    }
+
+    // MARK: - Historical Import
+
+    /// Backfills the last `days` days of REAL HealthKit data into SwiftData, upserting each day
+    /// by start-of-day so any prior row (including demo-seeded ones) is replaced with real
+    /// metrics. Today is owned by the live `fetchTodaySnapshot` path and is left untouched.
+    /// Best-effort: a day that errors or has no readable metric is skipped. Returns the number
+    /// of days actually imported. Call on the main actor (uses the main `ModelContext`).
+    @discardableResult
+    func importRecentHistory(days: Int, context: ModelContext) async -> Int {
+        guard isAvailable, days > 0 else { return 0 }
+        if !hasRequestedAuthorization {
+            try? await requestAuthorization()
+        }
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        var imported = 0
+        for offset in 1...days {
+            guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
+            guard let snapshot = try? await fetchSnapshot(for: day), snapshot.hasAnyMetric else { continue }
+            upsertSnapshot(snapshot, context: context)
+            imported += 1
+        }
+
+        if imported > 0 {
+            isAuthorized = true
+            try? context.save()
+        }
+        AppLog.health.notice("imported \(imported, privacy: .public) historical health day(s) of \(days, privacy: .public)")
+        return imported
+    }
+
+    /// Upserts a snapshot by its start-of-day date. Updates ONLY the HealthKit-sourced metrics,
+    /// preserving any existing `screenTimeMinutes` (which is sourced from ScreenTime, not Health).
+    private func upsertSnapshot(_ snapshot: HealthSnapshot, context: ModelContext) {
+        let day = Calendar.current.startOfDay(for: snapshot.date)
+        let descriptor = FetchDescriptor<HealthSnapshot>(predicate: #Predicate { $0.date == day })
+        if let existing = try? context.fetch(descriptor).first {
+            existing.sleepMinutes = snapshot.sleepMinutes
+            existing.steps = snapshot.steps
+            existing.activeCalories = snapshot.activeCalories
+            existing.exerciseMinutes = snapshot.exerciseMinutes
+            existing.restingHeartRate = snapshot.restingHeartRate
+            existing.runningDistanceMeters = snapshot.runningDistanceMeters
+        } else {
+            context.insert(snapshot)
+        }
     }
 
     // MARK: - Private Helpers

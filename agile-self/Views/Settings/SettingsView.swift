@@ -39,6 +39,8 @@ struct SettingsView: View {
     @State private var exportFile: ExportedDataFile?
     @State private var showExportShare = false
     @State private var showDeleteConfirmation = false
+    @State private var isImportingHealth = false
+    @State private var healthImportMessage: String?
 
     // MARK: - Constants
 
@@ -485,6 +487,27 @@ struct SettingsView: View {
                     .overlay(Theme.Colors.divider)
                     .padding(.leading, Theme.Spacing.md + 24 + Theme.Spacing.md)
 
+                // Backfills real Apple Health history (sleep, steps, activity) for the last 30
+                // days so past check-ins have real metrics to correlate against — not just today.
+                Button {
+                    Task { await importAppleHealthHistory() }
+                } label: {
+                    dataRowLabel(
+                        icon: "heart.text.square.fill",
+                        title: "Import Apple Health",
+                        trailing: isImportingHealth ? "…" : nil,
+                        iconColor: Theme.Colors.heartRate
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(isImportingHealth)
+                .accessibilityLabel("Import Apple Health history")
+                .accessibilityHint("Backfills your past sleep, steps, and activity for correlations")
+
+                Divider()
+                    .overlay(Theme.Colors.divider)
+                    .padding(.leading, Theme.Spacing.md + 24 + Theme.Spacing.md)
+
                 Button(role: .destructive) {
                     showDeleteConfirmation = true
                 } label: {
@@ -497,6 +520,28 @@ struct SettingsView: View {
             .background(Theme.Colors.backgroundSecondary)
             .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large))
         }
+        .alert(
+            "Apple Health",
+            isPresented: Binding(
+                get: { healthImportMessage != nil },
+                set: { if !$0 { healthImportMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { healthImportMessage = nil }
+        } message: {
+            Text(healthImportMessage ?? "")
+        }
+    }
+
+    /// Imports the last 30 days of real Apple Health data and reports how many days landed.
+    private func importAppleHealthHistory() async {
+        guard !isImportingHealth else { return }
+        isImportingHealth = true
+        let imported = await appContainer.healthKitService.importRecentHistory(days: 30, context: modelContext)
+        isImportingHealth = false
+        healthImportMessage = imported > 0
+            ? "Imported \(imported) day\(imported == 1 ? "" : "s") of Apple Health data."
+            : "No Apple Health data was available to import. Make sure Health access is allowed for Agile Self."
     }
 
     private func dataRowLabel(icon: String, title: String, trailing: String?, iconColor: Color) -> some View {
